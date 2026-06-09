@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.Button;
 import java.awt.CardLayout;
 import java.awt.Color;
+import java.awt.Dialog;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Frame;
@@ -23,6 +24,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.List;
 
 public class MainFrame extends Frame implements ActionListener, WindowListener {
 
@@ -39,6 +41,7 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 	Panel		panelMenuPadded;
 	Panel		currentMenuPanel;
 	Button		buttonStatusView;
+	Button		buttonFacilityInfo;
 	Button		buttonMyReservation;
 	Button		buttonReservation;
 	Button		buttonSettings;
@@ -46,10 +49,13 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 	Button		buttonGoToLogin;
 	Label		labelUserInfo;
 	// ログインフォーム（未ログイン時サイドバー）
-	TextField	tfSidebarUserID;
-	TextField	tfSidebarPassword;
-	Button		buttonSidebarLogin;
-	Label		labelLoginError;
+	TextField		tfSidebarUserID;
+	TextField		tfSidebarPassword;
+	Button			buttonSidebarLogin;
+	Label			labelLoginError;
+	java.awt.Checkbox	cbRememberMe;	// ログイン状態を保存するチェックボックス
+
+	static final String CREDS_FILE = System.getProperty( "user.home") + "/.reservation_credentials.txt";
 
 	// コンテンツエリア
 	Panel		panelContent;
@@ -57,16 +63,37 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 	TextArea	textMessage;
 
 	Panel	cardLogin;			// 未ログイン時の中央ログイン画面
-	Panel	cardSettings;		// 設定画面
+	Panel	cardFacilityInfo;
+	ChoiceFacility fiChoice;
+	TextArea	fiText;
+	Panel		cardNewRes;			// 新規予約ページ
+	Panel		nrTabContent;
+	CardLayout	nrTabLayout;
+	ChoiceFacility	nrFacility;
+	TextField	nrYear, nrMonth, nrDay;
+	ChoiceHour	nrStartHour, nrEndHour;
+	ChoiceMinute	nrStartMin, nrEndMin;
+	Label		nrResult;
+	TextField	nrCsvPath;
+	Label		nrCsvResult;
+	Panel		nrCsvDetail;	// 結果テーブルを差し替えるコンテナ
+	Button		nrBtnManual, nrBtnCsv;
+
+	Panel		cardSettings;		// 設定画面
 	TextField	tfCurrentPw, tfNewPw, tfConfirmPw;
 	Label		labelPwResult;
 	Panel	cardStatus;
 	Panel	statusCenter;
 	Label	labelStatusDate;
 	Button	btnCalendar;
+	Button	btnPrevDay;
+	Button	btnNextDay;
 	String	currentStatusDate;
 
 	Panel	cardMyRes;
+	Panel	myResCenter;
+	int		myResSortCol = 1;	// 1=日付（デフォルト）, 2=教室
+	boolean	myResSortAsc = true;
 	Panel	cardMessage;
 
 	Color BG        = new Color( 250, 242, 220);
@@ -121,12 +148,14 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		Font btnFont   = new Font( "Noto Sans JP", Font.BOLD, 13);
 
 		buttonStatusView    = new Button( "予約状況確認");
+		buttonFacilityInfo  = new Button( "教室概要");
 		buttonMyReservation = new Button( "自己予約確認");
 		buttonReservation   = new Button( "＋ 新規予約");
 		buttonSettings      = new Button( "設定");
 		buttonLogout        = new Button( "ログアウト");
 		buttonGoToLogin     = new Button( "ログイン画面へ");
 		buttonStatusView.setFont( btnFont);
+		buttonFacilityInfo.setFont( btnFont);
 		buttonMyReservation.setFont( btnFont);
 		buttonReservation.setFont( btnFont);
 		buttonSettings.setFont( btnFont);
@@ -148,6 +177,9 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		labelLoginError = new Label( "");
 		labelLoginError.setFont( new Font( "Noto Sans JP", Font.PLAIN, 11));
 		labelLoginError.setForeground( new Color( 200, 50, 50));
+
+		cbRememberMe = new java.awt.Checkbox( "ログイン状態を保存");
+		cbRememberMe.setFont( new Font( "Noto Sans JP", Font.PLAIN, 12));
 
 		Panel padLeft = new Panel() {
 			@Override public Dimension getPreferredSize() { return new Dimension( 12, 0); }
@@ -220,12 +252,15 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 
 		tfSidebarPassword.setBounds( 0, 178, W, 24);
 
-		buttonSidebarLogin.setBounds( 0, 218, W, 36);
+		cbRememberMe.setBackground( cardBg);
+		cbRememberMe.setBounds( 0, 208, W, 22);
+
+		buttonSidebarLogin.setBounds( 0, 240, W, 36);
 		buttonSidebarLogin.setBackground( GREEN);
 		buttonSidebarLogin.setForeground( Color.WHITE);
 
 		labelLoginError.setBackground( cardBg);
-		labelLoginError.setBounds( 0, 262, W, 22);
+		labelLoginError.setBounds( 0, 284, W, 22);
 
 		loginBox.add( loginBigTitle);
 		loginBox.add( loginSubTitle);
@@ -233,9 +268,10 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		loginBox.add( tfSidebarUserID);
 		loginBox.add( lblPass);
 		loginBox.add( tfSidebarPassword);
+		loginBox.add( cbRememberMe);
 		loginBox.add( buttonSidebarLogin);
 		loginBox.add( labelLoginError);
-		loginBox.setPreferredSize( new Dimension( W, 290));
+		loginBox.setPreferredSize( new Dimension( W, 310));
 
 		// カード風に見せるためにパディングパネルで囲む
 		Panel cardPad = new Panel( new BorderLayout());
@@ -269,21 +305,36 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		labelStatusTitle.setFont( new Font( "Noto Sans JP", Font.BOLD, 20));
 		labelStatusTitle.setForeground( new Color( 50, 120, 55));
 
-		Panel datePanel = new Panel();
+		Panel datePanel = new Panel( new java.awt.FlowLayout( java.awt.FlowLayout.CENTER, 8, 4));
 		datePanel.setBackground( BG);
-		btnCalendar = new Button( "📅");
-		btnCalendar.setFont( new Font( "Segoe UI Emoji", Font.PLAIN, 16));
-		btnCalendar.setPreferredSize( new Dimension( 36, 28));
+
+		btnPrevDay = new Button( "＜");
+		btnPrevDay.setFont( new Font( "Yu Gothic UI", Font.BOLD, 16));
+		btnPrevDay.setPreferredSize( new Dimension( 40, 32));
+
 		labelStatusDate = new Label(
-				new SimpleDateFormat( "yyyy年MM月dd日").format( Calendar.getInstance().getTime()) + "  ",
-				Label.RIGHT);
-		labelStatusDate.setFont( new Font( "Noto Sans JP", Font.BOLD, 16));
+				new SimpleDateFormat( "yyyy年MM月dd日").format( Calendar.getInstance().getTime()),
+				Label.CENTER);
+		labelStatusDate.setFont( new Font( "Noto Sans JP", Font.BOLD, 18));
 		labelStatusDate.setForeground( new Color( 80, 80, 80));
-		datePanel.add( btnCalendar);
+		labelStatusDate.setPreferredSize( new Dimension( 180, 32));
+
+		btnNextDay = new Button( "＞");
+		btnNextDay.setFont( new Font( "Yu Gothic UI", Font.BOLD, 16));
+		btnNextDay.setPreferredSize( new Dimension( 40, 32));
+
+		btnCalendar = new Button( "カレンダー");
+		btnCalendar.setFont( new Font( "Noto Sans JP", Font.BOLD, 12));
+		btnCalendar.setPreferredSize( new Dimension( 90, 32));
+
+		datePanel.add( btnPrevDay);
 		datePanel.add( labelStatusDate);
+		datePanel.add( btnNextDay);
+		datePanel.add( new Label( "  "));	// スペーサー
+		datePanel.add( btnCalendar);
 
 		statusHeader.add( labelStatusTitle, BorderLayout.WEST);
-		statusHeader.add( datePanel,        BorderLayout.EAST);
+		statusHeader.add( datePanel,        BorderLayout.CENTER);
 
 		statusCenter = new Panel( new BorderLayout());
 		statusCenter.setBackground( BG);
@@ -297,14 +348,153 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		// 自己予約確認カード
 		cardMyRes = new Panel( new BorderLayout());
 		cardMyRes.setBackground( BG);
-		Label labelMyResTitle = new Label( "  自己予約確認");
+		Label labelMyResTitle = new Label( "  自己予約確認（本日以降）");
 		labelMyResTitle.setFont( new Font( "Noto Sans JP", Font.BOLD, 20));
 		labelMyResTitle.setForeground( new Color( 50, 120, 55));
-		TextArea taMyRes = new TextArea( "← 「自己予約確認」ボタンを押すと表示されます", 5, 40);
-		taMyRes.setEditable( false);
-		taMyRes.setBackground( BG);
+		myResCenter = new Panel( new BorderLayout());
+		myResCenter.setBackground( BG);
 		cardMyRes.add( labelMyResTitle, BorderLayout.NORTH);
-		cardMyRes.add( taMyRes,         BorderLayout.CENTER);
+		cardMyRes.add( myResCenter,     BorderLayout.CENTER);
+
+		// === 新規予約カード ===
+		cardNewRes = new Panel( new BorderLayout());
+		cardNewRes.setBackground( BG);
+
+		// タイトル＋タブ切替ボタン
+		Panel nrNorth = new Panel( new BorderLayout());
+		nrNorth.setBackground( BG);
+		Label nrTitle = new Label( "  新規予約");
+		nrTitle.setFont( new Font( "Noto Sans JP", Font.BOLD, 20));
+		nrTitle.setForeground( new Color( 50, 120, 55));
+		Panel nrTabs = new Panel();
+		nrTabs.setBackground( BG);
+		nrBtnManual = new Button( "手動入力");
+		nrBtnCsv    = new Button( "CSV一括");
+		nrBtnManual.setFont( new Font( "Noto Sans JP", Font.BOLD, 12));
+		nrBtnCsv.setFont(    new Font( "Noto Sans JP", Font.BOLD, 12));
+		nrTabs.add( nrBtnManual); nrTabs.add( nrBtnCsv);
+		nrNorth.add( nrTitle, BorderLayout.WEST);
+		nrNorth.add( nrTabs,  BorderLayout.EAST);
+		cardNewRes.add( nrNorth, BorderLayout.NORTH);
+
+		// タブコンテンツ
+		nrTabLayout  = new CardLayout();
+		nrTabContent = new Panel( nrTabLayout);
+		nrTabContent.setBackground( BG);
+
+		// --- 手動入力タブ ---
+		Panel manualTab = new Panel( new java.awt.GridBagLayout());
+		manualTab.setBackground( BG);
+		Panel manualBox = new Panel( null);
+		manualBox.setBackground( BG);
+		int MW = 360;
+		Font mf = new Font( "Noto Sans JP", Font.BOLD, 13);
+		Font mif = new Font( "Noto Sans JP", Font.PLAIN, 14);
+
+		List<String> nrFacIds = new ArrayList<String>();
+		nrFacIds = rc.getFacilityId();
+		nrFacility = new ChoiceFacility( nrFacIds);
+		nrFacility.setFont( mif);
+
+		nrYear  = new TextField( "", 6);  nrYear.setFont( mif);  nrYear.setBackground( Color.WHITE);
+		nrMonth = new TextField( "", 2);  nrMonth.setFont( mif); nrMonth.setBackground( Color.WHITE);
+		nrDay   = new TextField( "", 2);  nrDay.setFont( mif);   nrDay.setBackground( Color.WHITE);
+		nrStartHour = new ChoiceHour();   nrStartHour.setFont( mif);
+		nrStartMin  = new ChoiceMinute(); nrStartMin.setFont( mif);
+		nrEndHour   = new ChoiceHour();   nrEndHour.setFont( mif);
+		nrEndMin    = new ChoiceMinute(); nrEndMin.setFont( mif);
+
+		Label lFac = new Label( "教室"); lFac.setFont( mf); lFac.setBackground( BG); lFac.setBounds( 0, 0, MW, 22);
+		nrFacility.setBounds( 0, 26, 200, 26);
+		Label lDay = new Label( "予約日"); lDay.setFont( mf); lDay.setBackground( BG); lDay.setBounds( 0, 68, MW, 22);
+		nrYear.setBounds(  0, 94, 80, 26); Label ly = new Label("年"); ly.setFont(mf); ly.setBackground(BG); ly.setBounds(84,94,20,26);
+		nrMonth.setBounds(108,94, 50, 26); Label lm = new Label("月"); lm.setFont(mf); lm.setBackground(BG); lm.setBounds(162,94,20,26);
+		nrDay.setBounds(  186,94, 50, 26); Label ld = new Label("日"); ld.setFont(mf); ld.setBackground(BG); ld.setBounds(240,94,20,26);
+		Label lSt = new Label( "開始"); lSt.setFont( mf); lSt.setBackground( BG); lSt.setBounds( 0, 136, MW, 22);
+		nrStartHour.setBounds( 0,162, 80,26); Label lsh=new Label("時"); lsh.setFont(mf); lsh.setBackground(BG); lsh.setBounds(84,162,20,26);
+		nrStartMin.setBounds( 108,162, 80,26); Label lsm=new Label("分"); lsm.setFont(mf); lsm.setBackground(BG); lsm.setBounds(192,162,20,26);
+		Label lEt = new Label( "終了"); lEt.setFont( mf); lEt.setBackground( BG); lEt.setBounds( 0, 204, MW, 22);
+		nrEndHour.setBounds( 0,230, 80,26); Label leh=new Label("時"); leh.setFont(mf); leh.setBackground(BG); leh.setBounds(84,230,20,26);
+		nrEndMin.setBounds( 108,230, 80,26); Label lem=new Label("分"); lem.setFont(mf); lem.setBackground(BG); lem.setBounds(192,230,20,26);
+
+		Button nrSubmit = new Button( "予約する");
+		nrSubmit.setFont( new Font( "Noto Sans JP", Font.BOLD, 14));
+		nrSubmit.setBackground( GREEN); nrSubmit.setForeground( Color.WHITE);
+		nrSubmit.setBounds( 0, 276, 200, 36);
+		nrResult = new Label( ""); nrResult.setFont( mf); nrResult.setBackground( BG); nrResult.setBounds( 0, 322, MW, 22);
+
+		for( java.awt.Component c : new java.awt.Component[]{ lFac, nrFacility, lDay,
+				nrYear, ly, nrMonth, lm, nrDay, ld, lSt, nrStartHour, lsh, nrStartMin, lsm,
+				lEt, nrEndHour, leh, nrEndMin, lem, nrSubmit, nrResult}) manualBox.add( c);
+		manualBox.setPreferredSize( new Dimension( MW, 350));
+		java.awt.GridBagConstraints mgbc = new java.awt.GridBagConstraints();
+		mgbc.anchor = java.awt.GridBagConstraints.CENTER; mgbc.fill = java.awt.GridBagConstraints.NONE;
+		mgbc.weightx = 1.0; mgbc.weighty = 1.0;
+		manualTab.add( manualBox, mgbc);
+
+		// --- CSV一括タブ ---
+		Panel csvTab = new Panel( new java.awt.GridBagLayout());
+		csvTab.setBackground( BG);
+		Panel csvBox = new Panel( null);
+		csvBox.setBackground( BG);
+		int CW = 800;
+
+		Label lCsvTitle = new Label( "CSVファイルで一括予約");
+		lCsvTitle.setFont( new Font( "Noto Sans JP", Font.BOLD, 16)); lCsvTitle.setForeground( new Color( 50,120,55));
+		lCsvTitle.setBackground( BG); lCsvTitle.setBounds( 0, 0, CW, 28);
+
+		Label lCsvFmt = new Label( "形式: facility_id, day(yyyy-MM-dd), start(HH:mm), end(HH:mm)");
+		lCsvFmt.setFont( new Font( "Noto Sans JP", Font.PLAIN, 12)); lCsvFmt.setBackground( BG); lCsvFmt.setBounds( 0, 36, CW, 20);
+
+		Button nrBtnTemplate = new Button( "テンプレートをデスクトップに保存");
+		nrBtnTemplate.setFont( mf); nrBtnTemplate.setBounds( 0, 64, CW, 30);
+
+		Label lCsvPath = new Label( "CSVファイルパス:"); lCsvPath.setFont( mf); lCsvPath.setBackground( BG); lCsvPath.setBounds( 0, 110, CW, 22);
+		nrCsvPath = new TextField( "", 30); nrCsvPath.setFont( mif); nrCsvPath.setBackground( Color.WHITE); nrCsvPath.setBounds( 0, 136, 300, 28);
+		Button nrBtnBrowse = new Button( "参照..."); nrBtnBrowse.setFont( mf); nrBtnBrowse.setBounds( 308, 136, 80, 28);
+		Button nrBtnImport = new Button( "インポート");
+		nrBtnImport.setFont( new Font( "Noto Sans JP", Font.BOLD, 14));
+		nrBtnImport.setBackground( GREEN); nrBtnImport.setForeground( Color.WHITE); nrBtnImport.setBounds( 0, 180, 200, 36);
+		nrCsvResult = new Label( ""); nrCsvResult.setFont( mf); nrCsvResult.setBackground( BG); nrCsvResult.setBounds( 0, 226, CW, 22);
+
+		Label lDetailTitle = new Label( "詳細"); lDetailTitle.setFont( mf); lDetailTitle.setBackground( BG); lDetailTitle.setBounds( 0, 258, CW, 22);
+		nrCsvDetail = new Panel( new BorderLayout());
+		nrCsvDetail.setBackground( BG);
+		nrCsvDetail.setBounds( 0, 284, CW, 380);
+
+		for( java.awt.Component c : new java.awt.Component[]{ lCsvTitle, lCsvFmt, nrBtnTemplate,
+				lCsvPath, nrCsvPath, nrBtnBrowse, nrBtnImport, nrCsvResult,
+				lDetailTitle, nrCsvDetail}) csvBox.add( c);
+		csvBox.setPreferredSize( new Dimension( CW, 680));
+		java.awt.GridBagConstraints cgbc = new java.awt.GridBagConstraints();
+		cgbc.anchor = java.awt.GridBagConstraints.CENTER; cgbc.fill = java.awt.GridBagConstraints.NONE;
+		cgbc.weightx = 1.0; cgbc.weighty = 1.0;
+		csvTab.add( csvBox, cgbc);
+
+		nrTabContent.add( manualTab, "manual");
+		nrTabContent.add( csvTab,    "csv");
+		nrTabLayout.show( nrTabContent, "manual");
+		cardNewRes.add( nrTabContent, BorderLayout.CENTER);
+
+		// ボタンアクション登録
+		nrBtnManual.addActionListener( this);
+		nrBtnCsv.addActionListener( this);
+		nrSubmit.addActionListener( this);
+		nrBtnTemplate.addActionListener( this);
+		nrBtnBrowse.addActionListener( this);
+		nrBtnImport.addActionListener( this);
+
+		// 施設変更時に時間帯を更新
+		nrFacility.addItemListener( ev -> {
+			int[][] t = reservationControl.getAvailableTime( nrFacility.getSelectedItem());
+			nrStartHour.resetRange( t[0][0], t[1][0]);
+			nrEndHour.resetRange(   t[0][0], t[1][0]);
+		});
+		if( !nrFacIds.isEmpty()) {
+			int[][] t = rc.getAvailableTime( nrFacility.getSelectedItem());
+			nrStartHour.resetRange( t[0][0], t[1][0]);
+			nrEndHour.resetRange(   t[0][0], t[1][0]);
+		}
 
 		// メッセージカード
 		cardMessage = new Panel( new BorderLayout());
@@ -312,6 +502,200 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		cardMessage.add( textMessage, BorderLayout.CENTER);
 
 		// === 設定カード ===
+		// === 教室概要カード ===
+		cardFacilityInfo = new Panel( new BorderLayout( 0, 0));
+		cardFacilityInfo.setBackground( BG);
+		Label labelFiTitle = new Label( "  教室概要");
+		labelFiTitle.setFont( new Font( "Noto Sans JP", Font.BOLD, 22));
+		labelFiTitle.setForeground( new Color( 50, 120, 55));
+		labelFiTitle.setBackground( BG);
+		cardFacilityInfo.add( labelFiTitle, BorderLayout.NORTH);
+
+		// 左カラム: 教室一覧（縦並びのボタン）
+		Panel fiLeft = new Panel( new BorderLayout());
+		fiLeft.setBackground( BG);
+		fiLeft.setPreferredSize( new Dimension( 180, 0));
+
+		Label fiListTitle = new Label( "  教室一覧");
+		fiListTitle.setFont( new Font( "Noto Sans JP", Font.BOLD, 14));
+		fiListTitle.setForeground( new Color( 100, 100, 100));
+		fiListTitle.setBackground( BG);
+		fiLeft.add( fiListTitle, BorderLayout.NORTH);
+
+		ArrayList<String> fiIds = rc.getFacilityId();
+		Collections.sort( fiIds);
+		Panel fiListPanel = new Panel( new GridLayout( 0, 1, 0, 6));
+		fiListPanel.setBackground( BG);
+
+		// 中央カラム: 教室詳細カード
+		Panel fiRight = new Panel( new java.awt.GridBagLayout());
+		fiRight.setBackground( BG);
+
+		Color fiCardBg = new Color( 255, 252, 242);
+		Panel fiCard = new Panel( null);
+		fiCard.setBackground( fiCardBg);
+		fiCard.setPreferredSize( new Dimension( 540, 440));
+
+		Label fiCardRoomId = new Label( "", Label.CENTER);
+		fiCardRoomId.setFont( new Font( "Noto Sans JP", Font.BOLD, 56));
+		fiCardRoomId.setForeground( GREEN);
+		fiCardRoomId.setBackground( fiCardBg);
+		fiCardRoomId.setBounds( 30, 30, 460, 80);
+
+		Label fiCardRoomName = new Label( "", Label.CENTER);
+		fiCardRoomName.setFont( new Font( "Noto Sans JP", Font.BOLD, 20));
+		fiCardRoomName.setForeground( new Color( 80, 80, 80));
+		fiCardRoomName.setBackground( fiCardBg);
+		fiCardRoomName.setBounds( 30, 120, 460, 30);
+
+		Label fiCardSeatsTitle = new Label( "  座席数", Label.LEFT);
+		fiCardSeatsTitle.setFont( new Font( "Noto Sans JP", Font.BOLD, 13));
+		fiCardSeatsTitle.setForeground( new Color( 130, 130, 130));
+		fiCardSeatsTitle.setBackground( fiCardBg);
+		fiCardSeatsTitle.setBounds( 80, 180, 160, 22);
+
+		Label fiCardSeats = new Label( "  ―", Label.LEFT);
+		fiCardSeats.setFont( new Font( "Noto Sans JP", Font.BOLD, 22));
+		fiCardSeats.setForeground( new Color( 60, 60, 60));
+		fiCardSeats.setBackground( fiCardBg);
+		fiCardSeats.setBounds( 80, 202, 160, 34);
+
+		Label fiCardTimeTitle = new Label( "  利用可能時間", Label.LEFT);
+		fiCardTimeTitle.setFont( new Font( "Noto Sans JP", Font.BOLD, 13));
+		fiCardTimeTitle.setForeground( new Color( 130, 130, 130));
+		fiCardTimeTitle.setBackground( fiCardBg);
+		fiCardTimeTitle.setBounds( 270, 180, 240, 22);
+
+		Label fiCardTime = new Label( "  ―", Label.LEFT);
+		fiCardTime.setFont( new Font( "Noto Sans JP", Font.BOLD, 22));
+		fiCardTime.setForeground( new Color( 60, 60, 60));
+		fiCardTime.setBackground( fiCardBg);
+		fiCardTime.setBounds( 270, 202, 240, 34);
+
+		fiCard.add( fiCardRoomId);
+		fiCard.add( fiCardRoomName);
+		fiCard.add( fiCardSeatsTitle); fiCard.add( fiCardSeats);
+		fiCard.add( fiCardTimeTitle);  fiCard.add( fiCardTime);
+
+		// 区切り線
+		Panel fiCardDivider = new Panel();
+		fiCardDivider.setBackground( new Color( 220, 215, 195));
+		fiCardDivider.setBounds( 60, 270, 420, 1);
+		fiCard.add( fiCardDivider);
+
+		// 本日の予約
+		Label fiCardTodayTitle = new Label( "  本日の予約", Label.LEFT);
+		fiCardTodayTitle.setFont( new Font( "Noto Sans JP", Font.BOLD, 13));
+		fiCardTodayTitle.setForeground( new Color( 130, 130, 130));
+		fiCardTodayTitle.setBackground( fiCardBg);
+		fiCardTodayTitle.setBounds( 80, 290, 160, 22);
+		Label fiCardToday = new Label( "  ―", Label.LEFT);
+		fiCardToday.setFont( new Font( "Noto Sans JP", Font.BOLD, 22));
+		fiCardToday.setForeground( new Color( 60, 60, 60));
+		fiCardToday.setBackground( fiCardBg);
+		fiCardToday.setBounds( 80, 312, 160, 34);
+		fiCard.add( fiCardTodayTitle); fiCard.add( fiCardToday);
+
+		// 今後7日間の予約
+		Label fiCardWeekTitle = new Label( "  今後7日間", Label.LEFT);
+		fiCardWeekTitle.setFont( new Font( "Noto Sans JP", Font.BOLD, 13));
+		fiCardWeekTitle.setForeground( new Color( 130, 130, 130));
+		fiCardWeekTitle.setBackground( fiCardBg);
+		fiCardWeekTitle.setBounds( 270, 290, 240, 22);
+		Label fiCardWeek = new Label( "  ―", Label.LEFT);
+		fiCardWeek.setFont( new Font( "Noto Sans JP", Font.BOLD, 22));
+		fiCardWeek.setForeground( new Color( 60, 60, 60));
+		fiCardWeek.setBackground( fiCardBg);
+		fiCardWeek.setBounds( 270, 312, 240, 34);
+		fiCard.add( fiCardWeekTitle); fiCard.add( fiCardWeek);
+
+		// 次の空き時間帯
+		Label fiCardSlotTitle = new Label( "  次の空き時間帯", Label.LEFT);
+		fiCardSlotTitle.setFont( new Font( "Noto Sans JP", Font.BOLD, 13));
+		fiCardSlotTitle.setForeground( new Color( 130, 130, 130));
+		fiCardSlotTitle.setBackground( fiCardBg);
+		fiCardSlotTitle.setBounds( 80, 360, 400, 22);
+		Label fiCardSlot = new Label( "  ―", Label.LEFT);
+		fiCardSlot.setFont( new Font( "Noto Sans JP", Font.BOLD, 22));
+		fiCardSlot.setForeground( GREEN);
+		fiCardSlot.setBackground( fiCardBg);
+		fiCardSlot.setBounds( 80, 382, 400, 34);
+		fiCard.add( fiCardSlotTitle); fiCard.add( fiCardSlot);
+
+		java.awt.GridBagConstraints fgbc2 = new java.awt.GridBagConstraints();
+		fgbc2.anchor = java.awt.GridBagConstraints.CENTER;
+		fgbc2.fill = java.awt.GridBagConstraints.NONE;
+		fgbc2.weightx = 1.0; fgbc2.weighty = 1.0;
+		fiRight.add( fiCard, fgbc2);
+
+		// 教室ボタンを生成
+		final Button[] fiRoomButtons = new Button[fiIds.size()];
+		Font fiBtnFont = new Font( "Noto Sans JP", Font.BOLD, 13);
+		for( int i = 0; i < fiIds.size(); i++) {
+			final String roomId = fiIds.get( i);
+			final int idx = i;
+			Button b = new Button( roomId);
+			b.setFont( fiBtnFont);
+			b.addActionListener( ev -> {
+				// 全ボタンの強調を解除（背景・文字色とも）
+				for( Button bb : fiRoomButtons) if( bb != null) {
+					bb.setBackground( null);
+					bb.setForeground( BUTTON_FG);
+				}
+				// 選択ボタンを強調
+				fiRoomButtons[idx].setBackground( GREEN);
+				fiRoomButtons[idx].setForeground( Color.WHITE);
+				// 詳細を更新
+				String exp = reservationControl.getFacilityExplanation( roomId);
+				// exp の形式: "<facility_name> 座席数: NN  利用可能時間: HH:MM～HH:MM"
+				fiCardRoomId.setText( roomId);
+				// パース
+				String roomName = "";
+				String seats = "―";
+				String timeRange = "―";
+				int idxSeats = exp.indexOf( "座席数");
+				if( idxSeats > 0) {
+					roomName = exp.substring( 0, idxSeats).trim();
+					int idxTime = exp.indexOf( "利用可能時間");
+					if( idxTime > idxSeats) {
+						seats = exp.substring( idxSeats + 4, idxTime).trim().replace( ":", "").trim();
+						if( seats.startsWith( "：")) seats = seats.substring( 1).trim();
+						timeRange = exp.substring( idxTime + 7).trim();
+						if( timeRange.startsWith( "：")) timeRange = timeRange.substring( 1).trim();
+					}
+				} else {
+					roomName = exp;
+				}
+				fiCardRoomName.setText( roomName);
+				fiCardSeats.setText( " " + seats);
+				fiCardTime.setText( " " + timeRange);
+
+				// 集計情報の更新
+				int todayCount = reservationControl.getReservationCountToday( roomId);
+				int weekCount  = reservationControl.getReservationCount7Days( roomId);
+				String nextSlot = reservationControl.getNextAvailableSlot( roomId);
+				fiCardToday.setText( " " + todayCount + "件");
+				fiCardWeek.setText(  " " + weekCount  + "件");
+				fiCardSlot.setText(  " " + nextSlot);
+			});
+			fiRoomButtons[i] = b;
+			fiListPanel.add( b);
+		}
+
+		ScrollPane fiScroll = new ScrollPane( ScrollPane.SCROLLBARS_AS_NEEDED);
+		fiScroll.add( fiListPanel);
+		fiLeft.add( fiScroll, BorderLayout.CENTER);
+
+		Panel fiBody = new Panel( new BorderLayout( 0, 0));
+		fiBody.setBackground( BG);
+		fiBody.add( fiLeft,  BorderLayout.WEST);
+		fiBody.add( fiRight, BorderLayout.CENTER);
+		cardFacilityInfo.add( fiBody, BorderLayout.CENTER);
+
+		// 互換性のため fiChoice / fiText のフィールドは保持するが使用しない
+		fiChoice = new ChoiceFacility( fiIds);
+		fiText = new TextArea( "", 1, 1);
+
 		cardSettings = new Panel( new BorderLayout());
 		cardSettings.setBackground( BG);
 		Label labelSettingsTitle = new Label( "  設定");
@@ -414,11 +798,13 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 
 		btnChangePw.addActionListener( this);
 
-		panelContent.add( cardLogin,    "login");
-		panelContent.add( cardStatus,   "status");
-		panelContent.add( cardMyRes,    "myres");
-		panelContent.add( cardMessage,  "message");
-		panelContent.add( cardSettings, "settings");
+		panelContent.add( cardLogin,        "login");
+		panelContent.add( cardStatus,       "status");
+		panelContent.add( cardFacilityInfo, "facilityinfo");
+		panelContent.add( cardMyRes,        "myres");
+		panelContent.add( cardNewRes,       "newres");
+		panelContent.add( cardMessage,      "message");
+		panelContent.add( cardSettings,     "settings");
 
 		cardLayout.show( panelContent, "login");
 
@@ -447,11 +833,16 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		buttonGoToLogin.addActionListener( this);
 		buttonSidebarLogin.addActionListener( this);
 		btnCalendar.addActionListener( this);
+		btnPrevDay.addActionListener( this);
+		btnNextDay.addActionListener( this);
 		buttonStatusView.addActionListener( this);
+		buttonFacilityInfo.addActionListener( this);
 		buttonMyReservation.addActionListener( this);
 		buttonReservation.addActionListener( this);
 		buttonSettings.addActionListener( this);
 		addWindowListener( this);
+
+		setMinimumSize( new Dimension( 1100, 700));
 	}
 
 	// ログイン状態に応じてサイドバーメニューを再構築
@@ -473,6 +864,7 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 			menu.add( sp1);
 			menu.add( menuTitle);
 			menu.add( buttonStatusView);
+			menu.add( buttonFacilityInfo);
 			menu.add( buttonGoToLogin);
 
 		} else {
@@ -489,6 +881,7 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 			menu.add( sp1);
 			menu.add( menuTitle);
 			menu.add( buttonStatusView);
+			menu.add( buttonFacilityInfo);
 			menu.add( buttonMyReservation);
 			menu.add( buttonReservation);
 			menu.add( sp2);
@@ -502,6 +895,329 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		panelMenuPadded.validate();
 		panelSidebar.validate();
 		validate();
+	}
+
+	// 確認ダイアログ（OK/キャンセル）
+	private boolean showConfirmDialog( String message) {
+		final Dialog dlg = new Dialog( this, "確認", true);
+		final boolean[] result = { false};
+		dlg.setLayout( new BorderLayout( 8, 8));
+		dlg.setBackground( BG);
+		dlg.setSize( 380, 180);
+		dlg.setLocationRelativeTo( this);
+		dlg.setResizable( false);
+
+		TextArea msg = new TextArea( message, 3, 30,
+				TextArea.SCROLLBARS_NONE);
+		msg.setEditable( false); msg.setBackground( BG);
+		msg.setFont( new Font( "Noto Sans JP", Font.BOLD, 13));
+		dlg.add( msg, BorderLayout.CENTER);
+
+		Panel south = new Panel(); south.setBackground( BG);
+		Button btnOK     = new Button( "  OK  ");
+		Button btnCancel = new Button( " キャンセル ");
+		btnOK.setFont( new Font( "Noto Sans JP", Font.BOLD, 13));
+		btnCancel.setFont( new Font( "Noto Sans JP", Font.BOLD, 13));
+		btnOK.setBackground( new Color( 200, 50, 50));
+		btnOK.setForeground( Color.WHITE);
+		btnOK.addActionListener( ev -> { result[0] = true; dlg.setVisible( false); dlg.dispose(); });
+		btnCancel.addActionListener( ev -> { dlg.setVisible( false); dlg.dispose(); });
+		south.add( btnCancel); south.add( btnOK);
+		dlg.add( south, BorderLayout.SOUTH);
+
+		dlg.addWindowListener( new java.awt.event.WindowAdapter() {
+			@Override public void windowClosing( WindowEvent e) { dlg.setVisible( false); dlg.dispose(); }
+		});
+		dlg.setVisible( true);
+		return result[0];
+	}
+
+	// 情報ダイアログ
+	private void showInfoDialog( String message) {
+		final Dialog dlg = new Dialog( this, "通知", true);
+		dlg.setLayout( new BorderLayout( 8, 8));
+		dlg.setBackground( BG);
+		dlg.setSize( 380, 160);
+		dlg.setLocationRelativeTo( this);
+		dlg.setResizable( false);
+
+		Label msg = new Label( "  " + message);
+		msg.setBackground( BG);
+		msg.setFont( new Font( "Noto Sans JP", Font.BOLD, 13));
+		dlg.add( msg, BorderLayout.CENTER);
+
+		Panel south = new Panel(); south.setBackground( BG);
+		Button btnOK = new Button( "  OK  ");
+		btnOK.setFont( new Font( "Noto Sans JP", Font.BOLD, 13));
+		btnOK.addActionListener( ev -> { dlg.setVisible( false); dlg.dispose(); });
+		south.add( btnOK);
+		dlg.add( south, BorderLayout.SOUTH);
+
+		dlg.addWindowListener( new java.awt.event.WindowAdapter() {
+			@Override public void windowClosing( WindowEvent e) { dlg.setVisible( false); dlg.dispose(); }
+		});
+		dlg.setVisible( true);
+	}
+
+	// 自己予約一覧を再構築して表示する
+	private void refreshMyReservations() {
+		myResCenter.removeAll();
+
+		if( !reservationControl.isLoggedIn()) {
+			Label msg = new Label( "  ログインして下さい。");
+			msg.setFont( new Font( "Noto Sans JP", Font.PLAIN, 14));
+			msg.setBackground( BG);
+			myResCenter.add( msg, BorderLayout.NORTH);
+			myResCenter.validate();
+			cardLayout.show( panelContent, "myres");
+			return;
+		}
+
+		ArrayList<String[]> list = reservationControl.getMyReservationsList();
+
+		// ソート
+		list.sort( ( a, b) -> {
+			int col = myResSortCol == 2 ? 0 : 1;	// 2=教室(index0), 1=日付(index1)
+			int cmp = a[col].compareTo( b[col]);
+			if( cmp == 0) cmp = a[1].compareTo( b[1]);	// 同じなら日付で
+			return myResSortAsc ? cmp : -cmp;
+		});
+
+		Color headerBg = new Color( 220, 215, 195);
+		Color rowBg    = BG;
+		Color rowAlt   = new Color( 245, 238, 215);
+		Color gridLine = new Color( 200, 195, 180);
+		Font  hFont    = new Font( "Noto Sans JP", Font.BOLD,  13);
+		Font  rFont    = new Font( "Noto Sans JP", Font.PLAIN, 13);
+		String today   = new java.text.SimpleDateFormat( "yyyy-MM-dd")
+				.format( java.util.Calendar.getInstance().getTime());
+
+		// テーブルを固定幅のパネルで囲んでスリムに
+		Panel tableWrapper = new Panel( new java.awt.GridBagLayout());
+		tableWrapper.setBackground( BG);
+
+		int[] colWidths = { 80, 130, 130, 170, 90, 90};
+		int rowH    = 30;
+		int totalW  = 0;
+		int[] colX  = new int[colWidths.length];
+		for( int c = 0; c < colWidths.length; c++) {
+			colX[c] = totalW;
+			totalW += colWidths[c] + 1;
+		}
+		int totalH = ( list.size() + 1) * ( rowH + 1) + 4;
+
+		Panel table = new Panel( null);
+		table.setBackground( gridLine);
+		table.setPreferredSize( new Dimension( totalW, totalH));
+
+		// --- ヘッダー行 ---
+		String facArrow  = myResSortCol == 2 ? ( myResSortAsc ? " ▲" : " ▼") : "";
+		String dateArrow = myResSortCol == 1 ? ( myResSortAsc ? " ▲" : " ▼") : "";
+
+		Button hFacility = new Button( "教室" + facArrow);
+		hFacility.setFont( hFont); hFacility.setBackground( headerBg);
+		hFacility.setBounds( colX[0] + 1, 1, colWidths[0], rowH);
+		hFacility.addActionListener( ev -> {
+			if( myResSortCol == 2) myResSortAsc = !myResSortAsc;
+			else { myResSortCol = 2; myResSortAsc = true; }
+			refreshMyReservations();
+		});
+
+		Button hDate = new Button( "日付" + dateArrow);
+		hDate.setFont( hFont); hDate.setBackground( headerBg);
+		hDate.setBounds( colX[1] + 1, 1, colWidths[1], rowH);
+		hDate.addActionListener( ev -> {
+			if( myResSortCol == 1) myResSortAsc = !myResSortAsc;
+			else { myResSortCol = 1; myResSortAsc = true; }
+			refreshMyReservations();
+		});
+
+		Label hTime = new Label( " 時間（" + list.size() + "件）", Label.LEFT);
+		hTime.setFont( hFont); hTime.setBackground( headerBg);
+		hTime.setBounds( colX[2] + 1, 1, colWidths[2], rowH);
+
+		Label hReservedAt = new Label( " 予約日時", Label.LEFT);
+		hReservedAt.setFont( hFont); hReservedAt.setBackground( headerBg);
+		hReservedAt.setBounds( colX[3] + 1, 1, colWidths[3], rowH);
+
+		Label hEdit = new Label( " 変更", Label.CENTER);
+		hEdit.setFont( hFont); hEdit.setBackground( headerBg);
+		hEdit.setBounds( colX[4] + 1, 1, colWidths[4], rowH);
+
+		Label hDel = new Label( " 削除", Label.CENTER);
+		hDel.setFont( hFont); hDel.setBackground( headerBg);
+		hDel.setBounds( colX[5] + 1, 1, colWidths[5], rowH);
+
+		table.add( hFacility); table.add( hDate); table.add( hTime); table.add( hReservedAt);
+		table.add( hEdit); table.add( hDel);
+
+		// --- データ行 ---
+		Font  btnFont = new Font( "Noto Sans JP", Font.BOLD, 12);
+		for( int i = 0; i < list.size(); i++) {
+			final String[] res = list.get( i);
+			Color bg = ( i % 2 == 0) ? rowBg : rowAlt;
+			int y = ( i + 1) * ( rowH + 1) + 1;
+
+			String[] dp    = res[1].split( "-");
+			String dispDay = dp[0] + "/" + dp[1] + "/" + dp[2];
+			String dayNote = res[1].equals( today) ? " （本日）" : "";
+			String reservedAt = ( res[4] != null) ? res[4] : "";
+
+			Label lFac  = new Label( "  " + res[0], Label.LEFT);
+			Label lDate = new Label( "  " + dispDay + dayNote, Label.LEFT);
+			Label lTime = new Label( "  " + res[2].substring(0,5) + " ～ " + res[3].substring(0,5), Label.LEFT);
+			Label lResAt = new Label( "  " + reservedAt, Label.LEFT);
+
+			lFac.setBounds(   colX[0] + 1, y, colWidths[0], rowH);
+			lDate.setBounds(  colX[1] + 1, y, colWidths[1], rowH);
+			lTime.setBounds(  colX[2] + 1, y, colWidths[2], rowH);
+			lResAt.setBounds( colX[3] + 1, y, colWidths[3], rowH);
+
+			for( Label l : new Label[]{ lFac, lDate, lTime, lResAt}) {
+				l.setFont( rFont); l.setBackground( bg);
+				table.add( l);
+			}
+
+			// 本日の予約は変更・削除不可
+			boolean canEdit = !res[1].equals( today);
+			final int reservationId = Integer.parseInt( res[5]);
+
+			Button bEdit = new Button( "変更");
+			bEdit.setFont( btnFont);
+			bEdit.setEnabled( canEdit);
+			bEdit.setBounds( colX[4] + 8, y + 3, colWidths[4] - 16, rowH - 6);
+			bEdit.addActionListener( ev -> {
+				EditReservationDialog dlg = new EditReservationDialog(
+						this, reservationControl, reservationId,
+						res[0], res[1], res[2], res[3]);
+				dlg.setVisible( true);
+				if( dlg.updated) {
+					refreshMyReservations();
+				}
+			});
+
+			Button bDel = new Button( "削除");
+			bDel.setFont( btnFont);
+			bDel.setEnabled( canEdit);
+			bDel.setBounds( colX[5] + 8, y + 3, colWidths[5] - 16, rowH - 6);
+			bDel.addActionListener( ev -> {
+				if( showConfirmDialog( "この予約を削除しますか？\n" + res[0] + " " + dispDay + " "
+						+ res[2].substring(0,5) + "～" + res[3].substring(0,5))) {
+					String result = reservationControl.deleteReservation( reservationId);
+					if( !result.isEmpty()) {
+						showInfoDialog( result);
+					}
+					refreshMyReservations();
+				}
+			});
+
+			table.add( bEdit); table.add( bDel);
+		}
+
+		if( list.isEmpty()) {
+			Label none = new Label( "  本日以降の予約はありません。");
+			none.setFont( rFont); none.setBackground( rowBg);
+			none.setBounds( 1, rowH + 2, totalW, rowH);
+			table.add( none);
+		}
+
+		java.awt.GridBagConstraints wgbc = new java.awt.GridBagConstraints();
+		wgbc.anchor = java.awt.GridBagConstraints.NORTH;
+		wgbc.fill   = java.awt.GridBagConstraints.NONE;
+		wgbc.weightx = 1.0; wgbc.weighty = 1.0;
+		tableWrapper.add( table, wgbc);
+
+		ScrollPane sp = new ScrollPane( ScrollPane.SCROLLBARS_AS_NEEDED);
+		sp.add( tableWrapper);
+		myResCenter.add( sp, BorderLayout.CENTER);
+		myResCenter.validate();
+		cardLayout.show( panelContent, "myres");
+	}
+
+	// CSVインポート結果テーブルを構築
+	private void buildCsvResultTable( ArrayList<String[]> results) {
+		nrCsvDetail.removeAll();
+
+		Color headerBg = new Color( 220, 215, 195);
+		Color okBg     = new Color( 200, 235, 200);
+		Color ngBg     = new Color( 255, 215, 215);
+		Color gridLine = new Color( 200, 195, 180);
+		Font  hFont    = new Font( "Noto Sans JP", Font.BOLD, 12);
+		Font  rFont    = new Font( "Noto Sans JP", Font.PLAIN, 12);
+
+		int[] colWidths = { 50, 40, 60, 110, 120, 400};
+		int rowH    = 28;
+		int totalW  = 0;
+		int[] colX  = new int[colWidths.length];
+		for( int c = 0; c < colWidths.length; c++) {
+			colX[c] = totalW;
+			totalW += colWidths[c] + 1;
+		}
+		int totalH = ( results.size() + 1) * ( rowH + 1) + 4;
+
+		Panel table = new Panel( null);
+		table.setBackground( gridLine);
+		table.setPreferredSize( new Dimension( totalW, totalH));
+
+		String[] headers = { "結果", "行", "教室", "日付", "時間", "メッセージ"};
+
+		// ヘッダー行
+		for( int c = 0; c < headers.length; c++) {
+			Label l = new Label( " " + headers[c], Label.LEFT);
+			l.setFont( hFont); l.setBackground( headerBg);
+			l.setBounds( colX[c] + 1, 1, colWidths[c], rowH);
+			table.add( l);
+		}
+
+		// データ行
+		for( int i = 0; i < results.size(); i++) {
+			String[] r = results.get( i);
+			Color bg = "OK".equals( r[0]) ? okBg : ngBg;
+			String[] cells = { r[0], r[1], r[2], r[3], r[4] + "～" + r[5], r[6]};
+			int y = ( i + 1) * ( rowH + 1) + 1;
+
+			for( int c = 0; c < cells.length; c++) {
+				Label l = new Label( " " + cells[c], Label.LEFT);
+				l.setFont( rFont); l.setBackground( bg);
+				l.setBounds( colX[c] + 1, y, colWidths[c], rowH);
+				table.add( l);
+			}
+		}
+
+		ScrollPane sp = new ScrollPane( ScrollPane.SCROLLBARS_AS_NEEDED);
+		sp.add( table);
+		nrCsvDetail.add( sp, BorderLayout.CENTER);
+		nrCsvDetail.validate();
+	}
+
+	// 認証情報をローカルに保存
+	private void saveCredentials( String userId, String password) {
+		try( java.io.PrintWriter pw = new java.io.PrintWriter(
+				new java.io.OutputStreamWriter(
+					new java.io.FileOutputStream( CREDS_FILE), "UTF-8"))) {
+			pw.println( userId);
+			pw.println( password);
+		} catch( Exception e) { e.printStackTrace(); }
+	}
+
+	// 認証情報を読み込み（{userId, password} または null）
+	private String[] loadCredentials() {
+		java.io.File f = new java.io.File( CREDS_FILE);
+		if( !f.exists()) return null;
+		try( java.io.BufferedReader br = new java.io.BufferedReader(
+				new java.io.InputStreamReader(
+					new java.io.FileInputStream( f), "UTF-8"))) {
+			String userId = br.readLine();
+			String pass   = br.readLine();
+			if( userId != null && pass != null) return new String[]{ userId, pass};
+		} catch( Exception e) { e.printStackTrace(); }
+		return null;
+	}
+
+	// 保存された認証情報を削除
+	private void clearCredentials() {
+		java.io.File f = new java.io.File( CREDS_FILE);
+		if( f.exists()) f.delete();
 	}
 
 	// テーマを適用する
@@ -622,6 +1338,11 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 				tfLoginID.setVisible( true);
 				labelUserInfo.setText( "  " + tfLoginID.getText());
 				labelUserInfo.setVisible( true);
+				if( cbRememberMe.getState()) {
+					saveCredentials( userId, pass);
+				} else {
+					clearCredentials();
+				}
 				buildMenu( true);
 				refreshStatusGrid();
 			} else {
@@ -637,8 +1358,20 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 			tfSidebarUserID.setText( "");
 			tfSidebarPassword.setText( "");
 			labelLoginError.setText( "");
+			cbRememberMe.setState( false);
+			clearCredentials();
 			buildMenu( false);
 			cardLayout.show( panelContent, "login");
+
+		} else if( e.getSource() == btnPrevDay || e.getSource() == btnNextDay) {
+			Calendar cal = Calendar.getInstance();
+			try {
+				cal.setTime( new SimpleDateFormat( "yyyy-MM-dd").parse( currentStatusDate));
+			} catch( Exception ex) {}
+			cal.add( Calendar.DAY_OF_MONTH, ( e.getSource() == btnPrevDay) ? -1 : 1);
+			currentStatusDate = new SimpleDateFormat( "yyyy-MM-dd").format( cal.getTime());
+			labelStatusDate.setText( new SimpleDateFormat( "yyyy年MM月dd日").format( cal.getTime()));
+			refreshStatusGrid();
 
 		} else if( e.getSource() == btnCalendar) {
 			Calendar cal = Calendar.getInstance();
@@ -662,6 +1395,9 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		} else if( e.getSource() == buttonGoToLogin) {
 			cardLayout.show( panelContent, "login");
 
+		} else if( e.getSource() == buttonFacilityInfo) {
+			cardLayout.show( panelContent, "facilityinfo");
+
 		} else if( e.getSource() == buttonStatusView) {
 			currentStatusDate = new SimpleDateFormat( "yyyy-MM-dd").format( Calendar.getInstance().getTime());
 			labelStatusDate.setText(
@@ -669,14 +1405,86 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 			refreshStatusGrid();
 
 		} else if( e.getSource() == buttonMyReservation) {
-			result = reservationControl.getMyReservations();
-			textMessage.setText( result);
-			cardLayout.show( panelContent, "message");
+			refreshMyReservations();
 
 		} else if( e.getSource() == buttonReservation) {
-			result = reservationControl.makeReservation( this);
-			textMessage.setText( result);
-			cardLayout.show( panelContent, "message");
+			// 新規予約ページに切り替え
+			nrYear.setText( ""); nrMonth.setText( ""); nrDay.setText( "");
+			nrResult.setText( ""); nrCsvResult.setText( ""); nrCsvPath.setText( "");
+			nrTabLayout.show( nrTabContent, "manual");
+			cardLayout.show( panelContent, "newres");
+
+		} else if( e.getSource() == nrBtnManual) {
+			nrTabLayout.show( nrTabContent, "manual");
+
+		} else if( e.getSource() == nrBtnCsv) {
+			nrTabLayout.show( nrTabContent, "csv");
+
+		} else if( e.getActionCommand().equals( "予約する")) {
+			result = reservationControl.reserveDirect(
+					nrFacility.getSelectedItem(),
+					nrYear.getText().trim(), nrMonth.getText().trim(), nrDay.getText().trim(),
+					nrStartHour.getSelectedItem(), nrStartMin.getSelectedItem(),
+					nrEndHour.getSelectedItem(),   nrEndMin.getSelectedItem());
+			nrResult.setText( "  " + result);
+			nrResult.setForeground( result.contains( "予約しました")
+					? new Color( 50, 130, 50) : new Color( 200, 50, 50));
+
+		} else if( e.getActionCommand().equals( "テンプレートをデスクトップに保存")) {
+			String userHome = System.getProperty( "user.home");
+			String[] candidates = {
+				userHome + "\\OneDrive\\Desktop\\予約テンプレート.csv",
+				userHome + "\\Desktop\\予約テンプレート.csv"
+			};
+			String savedPath = null;
+			for( String path : candidates) {
+				java.io.File parent = new java.io.File( path).getParentFile();
+				if( parent != null && parent.exists()) {
+					try( java.io.FileOutputStream fos = new java.io.FileOutputStream( path)) {
+						fos.write( new byte[]{ (byte)0xEF, (byte)0xBB, (byte)0xBF}); // UTF-8 BOM
+						java.io.PrintWriter pw = new java.io.PrintWriter(
+								new java.io.OutputStreamWriter( fos, "UTF-8"));
+						pw.println( "facility_id,day,start,end");
+						pw.println( "251,20260610,09:00,11:00");
+						pw.flush();
+						savedPath = path;
+						break;
+					} catch( Exception ex) { ex.printStackTrace(); }
+				}
+			}
+			if( savedPath != null) {
+				nrCsvResult.setText( "  保存しました: " + savedPath);
+				nrCsvResult.setForeground( new Color( 50, 130, 50));
+			} else {
+				nrCsvResult.setText( "  デスクトップが見つかりません。");
+				nrCsvResult.setForeground( new Color( 200, 50, 50));
+			}
+
+		} else if( e.getActionCommand().equals( "参照...")) {
+			java.awt.FileDialog fd = new java.awt.FileDialog( this, "CSVファイルを選択", java.awt.FileDialog.LOAD);
+			fd.setFile( "*.csv");
+			fd.setVisible( true);
+			if( fd.getFile() != null) {
+				nrCsvPath.setText( fd.getDirectory() + fd.getFile());
+			}
+
+		} else if( e.getActionCommand().equals( "インポート")) {
+			String path = nrCsvPath.getText().trim();
+			if( path.isEmpty()) {
+				nrCsvResult.setText( "  CSVファイルを指定してください。");
+				nrCsvResult.setForeground( new Color( 200, 50, 50));
+				nrCsvDetail.removeAll();
+				nrCsvDetail.validate();
+			} else {
+				ArrayList<String[]> results = reservationControl.importCSVDetailed( path);
+				int ok = 0, ng = 0;
+				for( String[] r : results) {
+					if( "OK".equals( r[0])) ok++; else ng++;
+				}
+				nrCsvResult.setText( "  完了: 成功 " + ok + "件 / 失敗 " + ng + "件");
+				nrCsvResult.setForeground( ng == 0 ? new Color( 50, 130, 50) : new Color( 200, 50, 50));
+				buildCsvResultTable( results);
+			}
 
 		} else if( e.getSource() == buttonSettings) {
 			tfCurrentPw.setText( ""); tfNewPw.setText( ""); tfConfirmPw.setText( "");
@@ -708,6 +1516,13 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 	@Override public void windowClosing( WindowEvent e)     { System.exit( 0); }
 	@Override
 	public void windowOpened( WindowEvent e) {
+		// 保存された認証情報があれば自動入力
+		String[] creds = loadCredentials();
+		if( creds != null) {
+			tfSidebarUserID.setText(   creds[0]);
+			tfSidebarPassword.setText( creds[1]);
+			cbRememberMe.setState( true);
+		}
 		cardLayout.show( panelContent, "login");
 	}
 	@Override public void windowClosed( WindowEvent e)      {}

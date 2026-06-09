@@ -178,6 +178,223 @@ public class ReservationControl {
 		return	facilityId;												// @1 全てのfacility_idの入ったListを返す
 	}																	// @1
 	
+	//// 予約を削除するメソッド（自分の予約のみ）
+	public	String	deleteReservation( int reservationId) {
+		if( !flagLogin) return "ログインして下さい。";
+		connectDB();
+		try {
+			// 翌日以降の自分の予約のみ削除可能
+			String	today = new SimpleDateFormat( "yyyy-MM-dd").format( Calendar.getInstance().getTime());
+			String	sql = "DELETE FROM db_reservation.reservation"
+					+ " WHERE reservation_id = " + reservationId
+					+ " AND user_id = '" + reservationUserID + "'"
+					+ " AND day > '" + today + "';";
+			int affected = sqlStmt.executeUpdate( sql);
+			closeDB();
+			return affected > 0 ? "" : "削除できませんでした。（翌日以降のみ削除可能）";
+		} catch( Exception e) {
+			e.printStackTrace();
+			closeDB();
+			return "予期しないエラーが発生しました。";
+		}
+	}
+
+	//// 予約を更新するメソッド（自分の予約のみ）
+	public	String	updateReservation( int reservationId, String facility, String year, String month, String day,
+			String startHour, String startMin, String endHour, String endMin) {
+		if( !flagLogin) return "ログインして下さい。";
+		if( month.length() == 1) month = "0" + month;
+		if( day.length()   == 1) day   = "0" + day;
+		try {
+			DateFormat	df = new SimpleDateFormat( "yyyy-MM-dd");
+			df.setLenient( false);
+			String	inData = year + "-" + month + "-" + day;
+			if( !inData.equals( df.format( df.parse( inData)))) return "日付の書式を修正して下さい。";
+		} catch( ParseException p) { return "日付の値を修正して下さい。"; }
+
+		Calendar	dateRes = Calendar.getInstance();
+		dateRes.set( Integer.parseInt( year), Integer.parseInt( month) - 1, Integer.parseInt( day));
+		if( !dateRes.after( Calendar.getInstance())) return "予約日が無効です。（翌日以降を指定）";
+
+		String	st = startHour + ":" + startMin + ":00";
+		String	et = endHour   + ":" + endMin   + ":00";
+		if( st.compareTo( et) >= 0) return "開始時刻と終了時刻が同じか終了時刻の方が早くなっています。";
+
+		try {
+			int[][]	limit = getAvailableTime( facility);
+			String	sl = String.format( "%02d:%02d:00", limit[0][0], limit[0][1]);
+			String	el = String.format( "%02d:%02d:00", limit[1][0], limit[1][1]);
+			if( sl.compareTo( st) > 0 || el.compareTo( et) < 0) return "利用可能時間外です。";
+
+			connectDB();
+			String	rdate = year + "-" + month + "-" + day;
+			// 自分の編集対象以外の予約と重ならないかチェック
+			String	sql = "SELECT * FROM db_reservation.reservation WHERE facility_id = '" + facility
+					+ "' AND day = '" + rdate + "' AND reservation_id != " + reservationId + ";";
+			ResultSet	rs = sqlStmt.executeQuery( sql);
+			while( rs.next()) {
+				String	s = rs.getString( "start_time"), e = rs.getString( "end_time");
+				if(( s.compareTo( st) <= 0 && st.compareTo( e) <= 0) ||
+				   ( st.compareTo( s) <= 0 && s.compareTo( et) <= 0)) {
+					closeDB(); return "既にある予約に重なっています。";
+				}
+			}
+			sql = "UPDATE db_reservation.reservation SET"
+					+ " facility_id = '" + facility + "',"
+					+ " day = '" + rdate + "',"
+					+ " start_time = '" + st + "',"
+					+ " end_time = '" + et + "'"
+					+ " WHERE reservation_id = " + reservationId
+					+ " AND user_id = '" + reservationUserID + "';";
+			int affected = sqlStmt.executeUpdate( sql);
+			closeDB();
+			return affected > 0 ? "" : "更新できませんでした。";
+		} catch( Exception e) {
+			e.printStackTrace();
+			return "予期しないエラーが発生しました。";
+		}
+	}
+
+	//// 直接パラメータで予約を登録するメソッド（新規予約ページ・CSVインポート共用）
+	public	String	reserveDirect( String facilityId, String year, String month, String day,
+			String startHour, String startMin, String endHour, String endMin) {
+		if( !flagLogin) return "ログインして下さい。";
+		if( month.length() == 1) month = "0" + month;
+		if( day.length()   == 1) day   = "0" + day;
+		try {
+			DateFormat	df = new SimpleDateFormat( "yyyy-MM-dd");
+			df.setLenient( false);
+			String	inData = year + "-" + month + "-" + day;
+			if( !inData.equals( df.format( df.parse( inData)))) return "日付の書式を修正して下さい。";
+		} catch( ParseException p) { return "日付の値を修正して下さい。"; }
+
+		Calendar	dateRes = Calendar.getInstance();
+		dateRes.set( Integer.parseInt( year), Integer.parseInt( month) - 1, Integer.parseInt( day));
+		if( !dateRes.after( Calendar.getInstance())) return "予約日が無効です。（翌日以降を指定）";
+
+		String	st = startHour + ":" + startMin + ":00";
+		String	et = endHour   + ":" + endMin   + ":00";
+		if( st.compareTo( et) >= 0) return "開始時刻と終了時刻が同じか終了時刻の方が早くなっています。";
+
+		try {
+			int[][]	limit = getAvailableTime( facilityId);
+			String	sl = String.format( "%02d:%02d:00", limit[0][0], limit[0][1]);
+			String	el = String.format( "%02d:%02d:00", limit[1][0], limit[1][1]);
+			if( sl.compareTo( st) > 0 || el.compareTo( et) < 0) return "利用可能時間外です。";
+
+			connectDB();
+			String	rdate = year + "-" + month + "-" + day;
+			String	sql = "SELECT * FROM db_reservation.reservation WHERE facility_id = '" + facilityId
+					+ "' AND day = '" + rdate + "';";
+			ResultSet	rs = sqlStmt.executeQuery( sql);
+			while( rs.next()) {
+				String	s = rs.getString( "start_time"), e = rs.getString( "end_time");
+				if(( s.compareTo( st) <= 0 && st.compareTo( e) <= 0) ||
+				   ( st.compareTo( s) <= 0 && s.compareTo( et) <= 0)) {
+					closeDB(); return "既にある予約に重なっています。";
+				}
+			}
+			SimpleDateFormat	sdf = new SimpleDateFormat( "yyyy-MM-dd HH:mm:ss");
+			String	now = sdf.format( Calendar.getInstance().getTime());
+			sql = "INSERT INTO db_reservation.reservation( facility_id, user_id, date, day, start_time, end_time)"
+				+ " VALUES( '" + facilityId + "','" + reservationUserID + "','" + now + "','"
+				+ rdate + "','" + st + "','" + et + "');";
+			sqlStmt.executeUpdate( sql);
+			closeDB();
+			return rdate + " " + st.substring(0,5) + "～" + et.substring(0,5) + " " + facilityId + "教室を予約しました。";
+		} catch( Exception e) {
+			e.printStackTrace(); return "予期しないエラーが発生しました。";
+		}
+	}
+
+	//// CSVファイルを読み込んで一括予約するメソッド
+	public	String	importCSV( String filePath) {
+		if( !flagLogin) return "ログインして下さい。";
+		int ok = 0, ng = 0;
+		StringBuilder	log = new StringBuilder();
+		try {
+			java.io.BufferedReader	br = new java.io.BufferedReader( new java.io.FileReader( filePath));
+			String	line;
+			int		lineNum = 0;
+			while(( line = br.readLine()) != null) {
+				lineNum++;
+				if( lineNum == 1 || line.trim().isEmpty() || line.startsWith( "#")) continue; // ヘッダー・空行・コメントスキップ
+				String[]	cols = line.split( ",");
+				if( cols.length < 4) { log.append( "行" + lineNum + ": 列数不足\n"); ng++; continue; }
+				String	fac  = cols[0].trim();
+				String	day  = cols[1].trim().replace( '/', '-');
+				// 8桁数字（20260610）形式も対応
+				if( day.matches( "\\d{8}")) {
+					day = day.substring( 0, 4) + "-" + day.substring( 4, 6) + "-" + day.substring( 6, 8);
+				}
+				String	st   = cols[2].trim();	// HH:mm
+				String	et   = cols[3].trim();	// HH:mm
+				String[]	dp = day.split( "-");
+				String[]	sp = st.split( ":");
+				String[]	ep = et.split( ":");
+				if( dp.length < 3 || sp.length < 2 || ep.length < 2) {
+					log.append( "行" + lineNum + ": 形式エラー\n"); ng++; continue;
+				}
+				String	res = reserveDirect( fac, dp[0], dp[1], dp[2], sp[0], sp[1], ep[0], ep[1]);
+				if( res.contains( "予約しました")) { ok++; }
+				else { log.append( "行" + lineNum + ": " + res + "\n"); ng++; }
+			}
+			br.close();
+		} catch( Exception e) {
+			return "ファイル読み込みエラー: " + e.getMessage();
+		}
+		return "完了: 成功 " + ok + "件 / 失敗 " + ng + "件\n" + log.toString();
+	}
+
+	//// CSVを読んで詳細結果を返す（各行: {status, line, facility, day, start, end, reason}）
+	public	ArrayList<String[]>	importCSVDetailed( String filePath) {
+		ArrayList<String[]>	results = new ArrayList<>();
+		if( !flagLogin) {
+			results.add( new String[]{ "NG", "-", "-", "-", "-", "-", "ログインして下さい。"});
+			return	results;
+		}
+		try {
+			java.io.BufferedReader	br = new java.io.BufferedReader(
+					new java.io.InputStreamReader(
+						new java.io.FileInputStream( filePath), "UTF-8"));
+			String	line;
+			int		lineNum = 0;
+			while(( line = br.readLine()) != null) {
+				lineNum++;
+				// BOM除去
+				if( lineNum == 1 && line.startsWith( "﻿")) line = line.substring( 1);
+				if( lineNum == 1 || line.trim().isEmpty() || line.startsWith( "#")) continue;
+				String[]	cols = line.split( ",");
+				if( cols.length < 4) {
+					results.add( new String[]{ "NG", String.valueOf( lineNum), "-", "-", "-", "-", "列数不足"});
+					continue;
+				}
+				String	fac  = cols[0].trim();
+				String	day  = cols[1].trim().replace( '/', '-');
+				if( day.matches( "\\d{8}")) {
+					day = day.substring( 0,4) + "-" + day.substring( 4,6) + "-" + day.substring( 6,8);
+				}
+				String	st   = cols[2].trim();
+				String	et   = cols[3].trim();
+				String[]	dp = day.split( "-");
+				String[]	sp = st.split( ":");
+				String[]	ep = et.split( ":");
+				if( dp.length < 3 || sp.length < 2 || ep.length < 2) {
+					results.add( new String[]{ "NG", String.valueOf( lineNum), fac, day, st, et, "形式エラー"});
+					continue;
+				}
+				String	res = reserveDirect( fac, dp[0], dp[1], dp[2], sp[0], sp[1], ep[0], ep[1]);
+				String	status = res.contains( "予約しました") ? "OK" : "NG";
+				String	reason = res.contains( "予約しました") ? "予約成功" : res;
+				results.add( new String[]{ status, String.valueOf( lineNum), fac, day, st, et, reason});
+			}
+			br.close();
+		} catch( Exception e) {
+			results.add( new String[]{ "NG", "-", "-", "-", "-", "-", "ファイル読み込みエラー: " + e.getMessage()});
+		}
+		return	results;
+	}
+
 	//// パスワードを変更するメソッド
 	public	String	changePassword( String currentPw, String newPw) {
 		if( !flagLogin) return "ログインして下さい。";
@@ -204,6 +421,96 @@ public class ReservationControl {
 		}
 		closeDB();
 		return	res;
+	}
+
+	//// 教室の本日の予約件数を返す
+	public	int	getReservationCountToday( String facilityId) {
+		int count = 0;
+		connectDB();
+		try {
+			String today = new SimpleDateFormat( "yyyy-MM-dd").format( Calendar.getInstance().getTime());
+			String sql = "SELECT COUNT(*) AS c FROM db_reservation.reservation"
+					+ " WHERE facility_id = '" + facilityId + "' AND day = '" + today + "';";
+			ResultSet rs = sqlStmt.executeQuery( sql);
+			if( rs.next()) count = rs.getInt( "c");
+		} catch( Exception e) { e.printStackTrace(); }
+		closeDB();
+		return count;
+	}
+
+	//// 教室の今後7日間の予約件数を返す
+	public	int	getReservationCount7Days( String facilityId) {
+		int count = 0;
+		connectDB();
+		try {
+			Calendar cal = Calendar.getInstance();
+			String today = new SimpleDateFormat( "yyyy-MM-dd").format( cal.getTime());
+			cal.add( Calendar.DAY_OF_MONTH, 7);
+			String weekLater = new SimpleDateFormat( "yyyy-MM-dd").format( cal.getTime());
+			String sql = "SELECT COUNT(*) AS c FROM db_reservation.reservation"
+					+ " WHERE facility_id = '" + facilityId
+					+ "' AND day BETWEEN '" + today + "' AND '" + weekLater + "';";
+			ResultSet rs = sqlStmt.executeQuery( sql);
+			if( rs.next()) count = rs.getInt( "c");
+		} catch( Exception e) { e.printStackTrace(); }
+		closeDB();
+		return count;
+	}
+
+	//// 教室の本日 今からの次の空き時間帯を返す（例: "16:00～21:30"、終日空きなら "本日終日空き"、本日予約終了なら "本日終了"）
+	public	String	getNextAvailableSlot( String facilityId) {
+		String result = "―";
+		connectDB();
+		try {
+			Calendar cal = Calendar.getInstance();
+			String today = new SimpleDateFormat( "yyyy-MM-dd").format( cal.getTime());
+			String now = new SimpleDateFormat( "HH:mm:ss").format( cal.getTime());
+
+			// 教室の利用可能時間を取得
+			String sqlF = "SELECT open_time, close_time FROM db_reservation.facility"
+					+ " WHERE facility_id = '" + facilityId + "';";
+			ResultSet rsF = sqlStmt.executeQuery( sqlF);
+			String openT = "00:00:00", closeT = "00:00:00";
+			if( rsF.next()) {
+				openT = rsF.getString( "open_time");
+				closeT = rsF.getString( "close_time");
+			}
+
+			// 現時刻が close 以降なら本日終了
+			if( now.compareTo( closeT) >= 0) { closeDB(); return "本日終了"; }
+
+			// 探索開始時刻 = max(open, now)
+			String searchStart = ( now.compareTo( openT) > 0) ? now : openT;
+
+			// 本日の予約を時刻順で取得（探索開始以降または重なる）
+			String sqlR = "SELECT start_time, end_time FROM db_reservation.reservation"
+					+ " WHERE facility_id = '" + facilityId + "' AND day = '" + today + "'"
+					+ " AND end_time > '" + searchStart + "'"
+					+ " ORDER BY start_time;";
+			ResultSet rsR = sqlStmt.executeQuery( sqlR);
+
+			String cursor = searchStart;
+			while( rsR.next()) {
+				String st = rsR.getString( "start_time");
+				String et = rsR.getString( "end_time");
+				if( cursor.compareTo( st) < 0) {
+					// cursor ～ st の間が空き
+					result = cursor.substring( 0, 5) + "～" + st.substring( 0, 5);
+					closeDB();
+					return result;
+				}
+				// 予約中、cursorを予約終了時刻まで進める
+				if( cursor.compareTo( et) < 0) cursor = et;
+			}
+			// 予約後 cursor ～ close まで空き
+			if( cursor.compareTo( closeT) < 0) {
+				result = cursor.substring( 0, 5) + "～" + closeT.substring( 0, 5);
+			} else {
+				result = "本日終了";
+			}
+		} catch( Exception e) { e.printStackTrace(); }
+		closeDB();
+		return result;
 	}
 
 	//// 指定日の全予約情報をリストで返す（グリッド表示用）
@@ -256,6 +563,35 @@ public class ReservationControl {
 		}
 		closeDB();
 		return	res;
+	}
+
+	//// 自己予約一覧をリストで返す（画面表示用）
+	public	ArrayList<String[]>	getMyReservationsList() {
+		ArrayList<String[]>	list = new ArrayList<>();
+		if( !flagLogin) return list;
+		connectDB();
+		try {
+			String	today = new java.text.SimpleDateFormat( "yyyy-MM-dd").format( new java.util.Date());
+			String	sql = "SELECT reservation_id, facility_id, day, start_time, end_time, date FROM db_reservation.reservation"
+					+ " WHERE user_id = '" + reservationUserID + "' AND day >= '" + today + "'"
+					+ " ORDER BY day, start_time;";
+			System.out.println( sql);
+			ResultSet	rs = sqlStmt.executeQuery( sql);
+			while( rs.next()) {
+				list.add( new String[]{
+					rs.getString( "facility_id"),
+					rs.getString( "day"),
+					rs.getString( "start_time"),
+					rs.getString( "end_time"),
+					rs.getString( "date"),			// 予約日時
+					String.valueOf( rs.getInt( "reservation_id"))	// 予約ID
+				});
+			}
+		} catch( Exception e) {
+			e.printStackTrace();
+		}
+		closeDB();
+		return	list;
 	}
 
 	//// 自己予約確認ボタン押下時の処理を行うメソッド（本日以降の自分の予約を表示）
