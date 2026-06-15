@@ -399,10 +399,10 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		nrYear  = new TextField( "", 6);  nrYear.setFont( mif);  nrYear.setBackground( Color.WHITE);
 		nrMonth = new TextField( "", 2);  nrMonth.setFont( mif); nrMonth.setBackground( Color.WHITE);
 		nrDay   = new TextField( "", 2);  nrDay.setFont( mif);   nrDay.setBackground( Color.WHITE);
-		// 文字数制限（年:4桁、月:2桁、日:2桁）
+		// 文字数制限と範囲制限（年:4桁、月:1-12、日:1-31）
 		limitTextLength( nrYear,  4);
-		limitTextLength( nrMonth, 2);
-		limitTextLength( nrDay,   2);
+		limitTextLength( nrMonth, 2, 12);
+		limitTextLength( nrDay,   2, 31);
 		nrStartHour = new ChoiceHour();   nrStartHour.setFont( mif);
 		nrStartMin  = new ChoiceMinute(); nrStartMin.setFont( mif);
 		nrEndHour   = new ChoiceHour();   nrEndHour.setFont( mif);
@@ -450,7 +450,7 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		Label lCsvFmt = new Label( "形式: facility_id, day(yyyy-MM-dd), start(HH:mm), end(HH:mm)");
 		lCsvFmt.setFont( new Font( "Noto Sans JP", Font.PLAIN, 12)); lCsvFmt.setBackground( BG); lCsvFmt.setBounds( 0, 36, CW, 20);
 
-		Button nrBtnTemplate = new Button( "テンプレートをデスクトップに保存");
+		Button nrBtnTemplate = new Button( "テンプレートをダウンロードに保存");
 		nrBtnTemplate.setFont( mf); nrBtnTemplate.setBounds( 0, 64, CW, 30);
 
 		Label lCsvPath = new Label( "CSVファイルパス:"); lCsvPath.setFont( mf); lCsvPath.setBackground( BG); lCsvPath.setBounds( 0, 110, CW, 22);
@@ -1194,16 +1194,36 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		nrCsvDetail.validate();
 	}
 
-	// TextField の文字数を maxLen に制限する
+	// TextField を数字のみ・maxLen 桁までに制限する
 	private void limitTextLength( final TextField tf, final int maxLen) {
+		limitTextLength( tf, maxLen, Integer.MAX_VALUE);
+	}
+
+	// TextField を数字のみ・maxLen 桁まで・最大値 maxVal までに制限する
+	private void limitTextLength( final TextField tf, final int maxLen, final int maxVal) {
 		tf.addTextListener( new java.awt.event.TextListener() {
 			@Override
 			public void textValueChanged( java.awt.event.TextEvent e) {
 				String t = tf.getText();
-				if( t.length() > maxLen) {
+				StringBuilder sb = new StringBuilder();
+				for( char c : t.toCharArray()) {
+					if( Character.isDigit( c)) sb.append( c);
+				}
+				String filtered = sb.toString();
+				if( filtered.length() > maxLen) filtered = filtered.substring( 0, maxLen);
+				// 範囲チェック：最大値を超えていたら最後の桁を切る
+				while( !filtered.isEmpty()) {
+					try {
+						int val = Integer.parseInt( filtered);
+						if( val > maxVal) {
+							filtered = filtered.substring( 0, filtered.length() - 1);
+						} else break;
+					} catch( NumberFormatException ex) { break; }
+				}
+				if( !filtered.equals( t)) {
 					int caret = tf.getCaretPosition();
-					tf.setText( t.substring( 0, maxLen));
-					tf.setCaretPosition( Math.min( caret, maxLen));
+					tf.setText( filtered);
+					tf.setCaretPosition( Math.min( caret, filtered.length()));
 				}
 			}
 		});
@@ -1449,11 +1469,11 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 			nrResult.setForeground( result.contains( "予約しました")
 					? new Color( 50, 130, 50) : new Color( 200, 50, 50));
 
-		} else if( e.getActionCommand().equals( "テンプレートをデスクトップに保存")) {
+		} else if( e.getActionCommand().equals( "テンプレートをダウンロードに保存")) {
 			String userHome = System.getProperty( "user.home");
 			String[] candidates = {
-				userHome + "\\OneDrive\\Desktop\\予約テンプレート.csv",
-				userHome + "\\Desktop\\予約テンプレート.csv"
+				userHome + "\\Downloads\\予約テンプレート.csv",
+				userHome + "\\OneDrive\\Downloads\\予約テンプレート.csv"
 			};
 			String savedPath = null;
 			for( String path : candidates) {
@@ -1475,7 +1495,7 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 				nrCsvResult.setText( "  保存しました: " + savedPath);
 				nrCsvResult.setForeground( new Color( 50, 130, 50));
 			} else {
-				nrCsvResult.setText( "  デスクトップが見つかりません。");
+				nrCsvResult.setText( "  ダウンロードフォルダが見つかりません。");
 				nrCsvResult.setForeground( new Color( 200, 50, 50));
 			}
 
