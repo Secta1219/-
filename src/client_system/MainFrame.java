@@ -399,6 +399,10 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		nrYear  = new TextField( "", 6);  nrYear.setFont( mif);  nrYear.setBackground( Color.WHITE);
 		nrMonth = new TextField( "", 2);  nrMonth.setFont( mif); nrMonth.setBackground( Color.WHITE);
 		nrDay   = new TextField( "", 2);  nrDay.setFont( mif);   nrDay.setBackground( Color.WHITE);
+		// 文字数制限（年:4桁、月:2桁、日:2桁）
+		limitTextLength( nrYear,  4);
+		limitTextLength( nrMonth, 2);
+		limitTextLength( nrDay,   2);
 		nrStartHour = new ChoiceHour();   nrStartHour.setFont( mif);
 		nrStartMin  = new ChoiceMinute(); nrStartMin.setFont( mif);
 		nrEndHour   = new ChoiceHour();   nrEndHour.setFont( mif);
@@ -421,12 +425,12 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		nrSubmit.setFont( new Font( "Noto Sans JP", Font.BOLD, 14));
 		nrSubmit.setBackground( GREEN); nrSubmit.setForeground( Color.WHITE);
 		nrSubmit.setBounds( 0, 276, 200, 36);
-		nrResult = new Label( ""); nrResult.setFont( mf); nrResult.setBackground( BG); nrResult.setBounds( 0, 322, MW, 22);
+		nrResult = new Label( ""); nrResult.setFont( mf); nrResult.setBackground( BG); nrResult.setBounds( 0, 322, MW + 200, 22);
 
 		for( java.awt.Component c : new java.awt.Component[]{ lFac, nrFacility, lDay,
 				nrYear, ly, nrMonth, lm, nrDay, ld, lSt, nrStartHour, lsh, nrStartMin, lsm,
 				lEt, nrEndHour, leh, nrEndMin, lem, nrSubmit, nrResult}) manualBox.add( c);
-		manualBox.setPreferredSize( new Dimension( MW, 350));
+		manualBox.setPreferredSize( new Dimension( MW + 200, 350));
 		java.awt.GridBagConstraints mgbc = new java.awt.GridBagConstraints();
 		mgbc.anchor = java.awt.GridBagConstraints.CENTER; mgbc.fill = java.awt.GridBagConstraints.NONE;
 		mgbc.weightx = 1.0; mgbc.weighty = 1.0;
@@ -1188,6 +1192,21 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		sp.add( table);
 		nrCsvDetail.add( sp, BorderLayout.CENTER);
 		nrCsvDetail.validate();
+	}
+
+	// TextField の文字数を maxLen に制限する
+	private void limitTextLength( final TextField tf, final int maxLen) {
+		tf.addTextListener( new java.awt.event.TextListener() {
+			@Override
+			public void textValueChanged( java.awt.event.TextEvent e) {
+				String t = tf.getText();
+				if( t.length() > maxLen) {
+					int caret = tf.getCaretPosition();
+					tf.setText( t.substring( 0, maxLen));
+					tf.setCaretPosition( Math.min( caret, maxLen));
+				}
+			}
+		});
 	}
 
 	// 認証情報をローカルに保存

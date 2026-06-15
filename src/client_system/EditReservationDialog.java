@@ -70,6 +70,10 @@ public class EditReservationDialog extends Dialog implements ActionListener {
 		tfYear  = new TextField( dp[0], 4); tfYear.setFont( inf);  tfYear.setBackground( Color.WHITE);
 		tfMonth = new TextField( dp[1], 2); tfMonth.setFont( inf); tfMonth.setBackground( Color.WHITE);
 		tfDay   = new TextField( dp[2], 2); tfDay.setFont( inf);   tfDay.setBackground( Color.WHITE);
+		// 文字数制限（年:4桁、月:2桁、日:2桁）
+		limitLen( tfYear,  4);
+		limitLen( tfMonth, 2);
+		limitLen( tfDay,   2);
 		tfYear.setBounds(  110, 110, 60, 26); Label ly = new Label("年"); ly.setFont(lf); ly.setBackground(BG); ly.setBounds( 174, 110, 20, 26);
 		tfMonth.setBounds( 200, 110, 40, 26); Label lm = new Label("月"); lm.setFont(lf); lm.setBackground(BG); lm.setBounds( 244, 110, 20, 26);
 		tfDay.setBounds(   270, 110, 40, 26); Label ld = new Label("日"); ld.setFont(lf); ld.setBackground(BG); ld.setBounds( 314, 110, 20, 26);
@@ -121,6 +125,20 @@ public class EditReservationDialog extends Dialog implements ActionListener {
 			@Override
 			public void windowClosing( WindowEvent e) {
 				setVisible( false); dispose();
+			}
+		});
+	}
+
+	private void limitLen( final TextField tf, final int maxLen) {
+		tf.addTextListener( new java.awt.event.TextListener() {
+			@Override
+			public void textValueChanged( java.awt.event.TextEvent e) {
+				String t = tf.getText();
+				if( t.length() > maxLen) {
+					int caret = tf.getCaretPosition();
+					tf.setText( t.substring( 0, maxLen));
+					tf.setCaretPosition( Math.min( caret, maxLen));
+				}
 			}
 		});
 	}
