@@ -1259,19 +1259,26 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		if( f.exists()) f.delete();
 	}
 
-	// テーマを適用する
+	// テーマを適用する（BUG-ST-006修正：背景色だけでなく前景色も連動）
 	private void applyTheme( int themeId) {
 		int[] t = THEMES[themeId];
 		Color oldGreen   = GREEN;
 		Color oldSidebar = SIDEBAR;
 		Color oldBG      = BG;
+		Color oldButton  = BUTTON_FG;
 		GREEN     = new Color( t[0], t[1], t[2]);
 		SIDEBAR   = new Color( t[3], t[4], t[5]);
 		BG        = new Color( t[6], t[7], t[8]);
 		BUTTON_FG = new Color( t[9], t[10], t[11]);
+		// 背景色の置換
 		recolorBg( this, oldGreen,   GREEN);
 		recolorBg( this, oldSidebar, SIDEBAR);
 		recolorBg( this, oldBG,      BG);
+		// 前景色の置換（プライマリ＝旧緑/旧BUTTON_FG/旧BGなど）
+		recolorFg( this, oldGreen,   GREEN);
+		recolorFg( this, oldButton,  BUTTON_FG);
+		recolorFg( this, oldBG,      BG);
+		// ヘッダラベルは前景が BG（旧）→ BG（新）
 		labelTitle.setForeground( BG);
 		buildMenu( reservationControl.isLoggedIn());	// メニューを新色で再構築
 		repaint();
@@ -1283,6 +1290,16 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		if( c instanceof java.awt.Container) {
 			for( java.awt.Component child : ((java.awt.Container) c).getComponents()) {
 				recolorBg( child, oldC, newC);
+			}
+		}
+	}
+
+	// コンポーネントを再帰的に前景色を更新する
+	private void recolorFg( java.awt.Component c, Color oldC, Color newC) {
+		if( oldC.equals( c.getForeground())) c.setForeground( newC);
+		if( c instanceof java.awt.Container) {
+			for( java.awt.Component child : ((java.awt.Container) c).getComponents()) {
+				recolorFg( child, oldC, newC);
 			}
 		}
 	}
@@ -1344,9 +1361,14 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 
 				for( String[] res : reservations) {
 					if( res[0].equals( fid)) {
-						int rStart = Integer.parseInt( res[2].substring( 0, 2));
-						int rEnd   = Integer.parseInt( res[3].substring( 0, 2));
-						if( hour >= rStart && hour < rEnd) {
+						// 分単位で重なり判定（BUG-ST-004修正：09:30～10:30 のような予約も正しく表示）
+						int rStartMin = Integer.parseInt( res[2].substring( 0, 2)) * 60
+								+ Integer.parseInt( res[2].substring( 3, 5));
+						int rEndMin   = Integer.parseInt( res[3].substring( 0, 2)) * 60
+								+ Integer.parseInt( res[3].substring( 3, 5));
+						int cellStart = hour * 60;
+						int cellEnd   = ( hour + 1) * 60;
+						if( rStartMin < cellEnd && cellStart < rEndMin) {
 							if( reservationControl.isLoggedIn()) {
 								cell.setText( " " + res[1]);
 								boolean isOwn = res[1].equals( reservationControl.reservationUserID);
