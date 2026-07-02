@@ -85,6 +85,11 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 	Panel	cardStatus;
 	Panel	statusCenter;
 	Label	labelStatusDate;
+	TextField	tfStatusDate;
+	CardLayout	dateCardLayout;
+	Panel		dateCardPanel;
+	Button		btnFloorFilter;
+	java.util.Set<String>	selectedFloors = new java.util.TreeSet<>();
 	Button	btnCalendar;
 	Button	btnPrevDay;
 	Button	btnNextDay;
@@ -312,12 +317,51 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		btnPrevDay.setFont( new Font( "Yu Gothic UI", Font.BOLD, 16));
 		btnPrevDay.setPreferredSize( new Dimension( 40, 32));
 
-		labelStatusDate = new Label(
-				new SimpleDateFormat( "yyyy年MM月dd日").format( Calendar.getInstance().getTime()),
-				Label.CENTER);
+		String initDate = new SimpleDateFormat( "yyyy年MM月dd日").format( Calendar.getInstance().getTime());
+		String initDateInput = new SimpleDateFormat( "yyyy/MM/dd").format( Calendar.getInstance().getTime());
+
+		labelStatusDate = new Label( initDate, Label.CENTER);
 		labelStatusDate.setFont( new Font( "Noto Sans JP", Font.BOLD, 18));
 		labelStatusDate.setForeground( new Color( 80, 80, 80));
-		labelStatusDate.setPreferredSize( new Dimension( 180, 32));
+
+		tfStatusDate = new TextField( initDateInput);
+		tfStatusDate.setFont( new Font( "Noto Sans JP", Font.BOLD, 18));
+		tfStatusDate.setForeground( new Color( 80, 80, 80));
+		tfStatusDate.setBackground( Color.WHITE);
+
+		dateCardLayout = new CardLayout();
+		dateCardPanel = new Panel( dateCardLayout);
+		dateCardPanel.setBackground( BG);
+		dateCardPanel.setPreferredSize( new Dimension( 200, 32));
+		dateCardPanel.add( labelStatusDate, "label");
+		dateCardPanel.add( tfStatusDate,    "edit");
+		dateCardLayout.show( dateCardPanel, "label");
+
+		// Label クリックで TextField に切替
+		labelStatusDate.addMouseListener( new java.awt.event.MouseAdapter() {
+			@Override
+			public void mouseClicked( java.awt.event.MouseEvent e) {
+				String[] dp = currentStatusDate.split( "-");
+				tfStatusDate.setText( dp[0] + "/" + dp[1] + "/" + dp[2]);
+				dateCardLayout.show( dateCardPanel, "edit");
+				tfStatusDate.requestFocus();
+				tfStatusDate.selectAll();
+			}
+		});
+		labelStatusDate.setCursor( java.awt.Cursor.getPredefinedCursor( java.awt.Cursor.HAND_CURSOR));
+
+		// TextField: Enter で確定、ESC でキャンセル、Focus離脱で確定
+		tfStatusDate.addKeyListener( new java.awt.event.KeyAdapter() {
+			@Override
+			public void keyPressed( java.awt.event.KeyEvent e) {
+				if( e.getKeyCode() == java.awt.event.KeyEvent.VK_ENTER) commitDateInput();
+				else if( e.getKeyCode() == java.awt.event.KeyEvent.VK_ESCAPE) cancelDateInput();
+			}
+		});
+		tfStatusDate.addFocusListener( new java.awt.event.FocusAdapter() {
+			@Override
+			public void focusLost( java.awt.event.FocusEvent e) { commitDateInput(); }
+		});
 
 		btnNextDay = new Button( "＞");
 		btnNextDay.setFont( new Font( "Yu Gothic UI", Font.BOLD, 16));
@@ -327,11 +371,21 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		btnCalendar.setFont( new Font( "Noto Sans JP", Font.BOLD, 12));
 		btnCalendar.setPreferredSize( new Dimension( 90, 32));
 
+		btnFloorFilter = new Button( "階フィルタ");
+		btnFloorFilter.setFont( new Font( "Noto Sans JP", Font.BOLD, 12));
+		btnFloorFilter.setPreferredSize( new Dimension( 100, 32));
+
+		// 初期値：全階を選択状態にしておく
+		for( String fid : rc.getFacilityId()) {
+			if( fid != null && fid.length() >= 2) selectedFloors.add( fid.substring( 0, 2));
+		}
+
 		datePanel.add( btnPrevDay);
-		datePanel.add( labelStatusDate);
+		datePanel.add( dateCardPanel);
 		datePanel.add( btnNextDay);
 		datePanel.add( new Label( "  "));	// スペーサー
 		datePanel.add( btnCalendar);
+		datePanel.add( btnFloorFilter);
 
 		statusHeader.add( labelStatusTitle, BorderLayout.WEST);
 		statusHeader.add( datePanel,        BorderLayout.CENTER);
@@ -838,6 +892,7 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		buttonSidebarLogin.addActionListener( this);
 		btnCalendar.addActionListener( this);
 		btnPrevDay.addActionListener( this);
+		btnFloorFilter.addActionListener( this);
 		btnNextDay.addActionListener( this);
 		buttonStatusView.addActionListener( this);
 		buttonFacilityInfo.addActionListener( this);
@@ -1304,6 +1359,164 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		}
 	}
 
+	// 階フィルタドロップダウンを表示（カレンダーと同じくタイトルバーなしのフローティング）
+	private void showFloorFilterDialog() {
+		ArrayList<String> facIds = reservationControl.getFacilityId();
+		java.util.TreeSet<String> floors = new java.util.TreeSet<>();
+		for( String fid : facIds) {
+			if( fid != null && fid.length() >= 2) floors.add( fid.substring( 0, 2));
+		}
+
+		final Dialog dlg = new Dialog( this, "", false);
+		dlg.setUndecorated( true);
+		dlg.setLayout( new BorderLayout( 0, 0));
+		dlg.setBackground( Color.BLACK);	// 外枠用
+
+		int width = 280;
+		int rowH = 36;
+		int headerH = 36;
+		int footerH = 52;
+		int height = headerH + floors.size() * rowH + footerH + 16;
+		dlg.setSize( width, height);
+		dlg.setResizable( false);
+
+		// 内側コンテンツPanel（外枠を作るためにDialogに直接追加するのは inner にする）
+		Panel inner = new Panel( new BorderLayout( 0, 0));
+		inner.setBackground( BG);
+
+		// ヘッダ
+		Panel header = new Panel( new BorderLayout());
+		header.setBackground( GREEN);
+		header.setPreferredSize( new Dimension( width, headerH));
+		Label headerLabel = new Label( "  表示する階を選択", Label.LEFT);
+		headerLabel.setFont( new Font( "Noto Sans JP", Font.BOLD, 14));
+		headerLabel.setForeground( Color.WHITE);
+		headerLabel.setBackground( GREEN);
+		header.add( headerLabel, BorderLayout.CENTER);
+		inner.add( header, BorderLayout.NORTH);
+
+		// チェックボックス領域
+		Panel center = new Panel( new GridLayout( 0, 1, 0, 0));
+		Color cardBg = new Color( 255, 252, 242);
+		Color altBg  = BG;
+		center.setBackground( cardBg);
+		final java.util.HashMap<String, java.awt.Checkbox> cbMap = new java.util.HashMap<>();
+		int i = 0;
+		for( String f : floors) {
+			Panel row = new Panel( new BorderLayout());
+			row.setBackground( ( i % 2 == 0) ? cardBg : altBg);
+			java.awt.Checkbox cb = new java.awt.Checkbox( "  " + f + " 階", selectedFloors.contains( f));
+			cb.setFont( new Font( "Noto Sans JP", Font.BOLD, 15));
+			cb.setBackground( ( i % 2 == 0) ? cardBg : altBg);
+			cb.setForeground( new Color( 50, 50, 50));
+			cbMap.put( f, cb);
+			row.add( cb, BorderLayout.CENTER);
+			center.add( row);
+			i++;
+		}
+		inner.add( center, BorderLayout.CENTER);
+
+		// フッタ
+		Panel south = new Panel( new java.awt.FlowLayout( java.awt.FlowLayout.CENTER, 6, 10));
+		south.setBackground( BG);
+		south.setPreferredSize( new Dimension( width, footerH));
+		Button btnAll   = new Button( "全選択");
+		Button btnNone  = new Button( "全解除");
+		Button btnApply = new Button( "適用");
+		btnAll.setFont(   new Font( "Noto Sans JP", Font.BOLD, 12));
+		btnNone.setFont(  new Font( "Noto Sans JP", Font.BOLD, 12));
+		btnApply.setFont( new Font( "Noto Sans JP", Font.BOLD, 13));
+		btnAll.setPreferredSize(   new Dimension( 70, 30));
+		btnNone.setPreferredSize(  new Dimension( 70, 30));
+		btnApply.setPreferredSize( new Dimension( 90, 30));
+		btnApply.setBackground( GREEN);
+		btnApply.setForeground( Color.WHITE);
+
+		btnAll.addActionListener(  ev -> { for( java.awt.Checkbox cb : cbMap.values()) cb.setState( true); });
+		btnNone.addActionListener( ev -> { for( java.awt.Checkbox cb : cbMap.values()) cb.setState( false); });
+		btnApply.addActionListener( ev -> {
+			selectedFloors.clear();
+			for( java.util.Map.Entry<String, java.awt.Checkbox> entry : cbMap.entrySet()) {
+				if( entry.getValue().getState()) selectedFloors.add( entry.getKey());
+			}
+			dlg.setVisible( false); dlg.dispose();
+			refreshStatusGrid();
+		});
+
+		south.add( btnAll); south.add( btnNone); south.add( btnApply);
+		inner.add( south, BorderLayout.SOUTH);
+
+		// 中央にinnerを配置、4辺に1pxの黒スペーサーで外枠を作る
+		dlg.add( inner, BorderLayout.CENTER);
+		Panel topL = new Panel(); topL.setBackground( Color.BLACK); topL.setPreferredSize( new Dimension( 0, 1));
+		Panel botL = new Panel(); botL.setBackground( Color.BLACK); botL.setPreferredSize( new Dimension( 0, 1));
+		Panel lftL = new Panel(); lftL.setBackground( Color.BLACK); lftL.setPreferredSize( new Dimension( 1, 0));
+		Panel rgtL = new Panel(); rgtL.setBackground( Color.BLACK); rgtL.setPreferredSize( new Dimension( 1, 0));
+		dlg.add( topL, BorderLayout.NORTH);
+		dlg.add( botL, BorderLayout.SOUTH);
+		dlg.add( lftL, BorderLayout.WEST);
+		dlg.add( rgtL, BorderLayout.EAST);
+
+		// ボタン直下に表示（画面端補正あり）
+		java.awt.Point p = btnFloorFilter.getLocationOnScreen();
+		int x = p.x + btnFloorFilter.getWidth() - width;
+		int screenW = java.awt.Toolkit.getDefaultToolkit().getScreenSize().width;
+		if( x + width > screenW) x = screenW - width - 5;
+		if( x < 0) x = 0;
+		dlg.setLocation( x, p.y + btnFloorFilter.getHeight());
+
+		dlg.addWindowListener( new java.awt.event.WindowAdapter() {
+			@Override public void windowClosing( WindowEvent e) { dlg.setVisible( false); dlg.dispose(); }
+		});
+
+		// 外部クリックで閉じる：その際に現在のチェック状態を反映
+		dlg.addWindowFocusListener( new java.awt.event.WindowFocusListener() {
+			@Override public void windowGainedFocus( WindowEvent e) {}
+			@Override public void windowLostFocus( WindowEvent e) {
+				selectedFloors.clear();
+				for( java.util.Map.Entry<String, java.awt.Checkbox> entry : cbMap.entrySet()) {
+					if( entry.getValue().getState()) selectedFloors.add( entry.getKey());
+				}
+				dlg.setVisible( false); dlg.dispose();
+				refreshStatusGrid();
+			}
+		});
+
+		dlg.setVisible( true);
+	}
+
+	// 日付編集の確定処理
+	private void commitDateInput() {
+		String t = tfStatusDate.getText().trim().replace( '/', '-').replace( '.', '-');
+		// 桁数別の解釈：8桁=yyyymmdd, 7桁=yyyymdd（月1桁・日2桁）, 6桁=yyyymd（月1桁・日1桁）
+		if( t.matches( "\\d{8}")) {
+			t = t.substring( 0, 4) + "-" + t.substring( 4, 6) + "-" + t.substring( 6, 8);
+		} else if( t.matches( "\\d{7}")) {
+			t = t.substring( 0, 4) + "-" + t.substring( 4, 5) + "-" + t.substring( 5, 7);
+		} else if( t.matches( "\\d{6}")) {
+			t = t.substring( 0, 4) + "-" + t.substring( 4, 5) + "-" + t.substring( 5, 6);
+		}
+		try {
+			java.text.SimpleDateFormat df = new java.text.SimpleDateFormat( "yyyy-MM-dd");
+			df.setLenient( false);
+			String norm = df.format( df.parse( t));
+			currentStatusDate = norm;
+			String[] parts = norm.split( "-");
+			labelStatusDate.setText( parts[0] + "年" + parts[1] + "月" + parts[2] + "日");
+			refreshStatusGrid();
+		} catch( Exception ex) {
+			// パース失敗時はキャンセル扱い
+		}
+		dateCardLayout.show( dateCardPanel, "label");
+	}
+
+	// 日付編集のキャンセル処理
+	private void cancelDateInput() {
+		String[] dp = currentStatusDate.split( "-");
+		tfStatusDate.setText( dp[0] + "/" + dp[1] + "/" + dp[2]);
+		dateCardLayout.show( dateCardPanel, "label");
+	}
+
 	// グリッドを再描画する
 	private void refreshStatusGrid() {
 		statusCenter.removeAll();
@@ -1319,6 +1532,16 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		ArrayList<String>   facilities   = reservationControl.getFacilityId();
 		ArrayList<String[]> reservations = reservationControl.getReservationsForDate( date);
 		Collections.sort( facilities);
+		// 階フィルタを適用（前半2桁が selectedFloors に含まれる教室のみ表示）
+		if( selectedFloors != null && !selectedFloors.isEmpty()) {
+			ArrayList<String> filtered = new ArrayList<>();
+			for( String fid : facilities) {
+				if( fid != null && fid.length() >= 2 && selectedFloors.contains( fid.substring( 0, 2))) {
+					filtered.add( fid);
+				}
+			}
+			facilities = filtered;
+		}
 
 		int startHour = 8;
 		int endHour   = 21;
@@ -1434,10 +1657,20 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 			labelStatusDate.setText( new SimpleDateFormat( "yyyy年MM月dd日").format( cal.getTime()));
 			refreshStatusGrid();
 
+		} else if( e.getSource() == btnFloorFilter) {
+			showFloorFilterDialog();
+
 		} else if( e.getSource() == btnCalendar) {
 			Calendar cal = Calendar.getInstance();
 			CalendarDialog cd = new CalendarDialog( this,
 					cal.get( Calendar.YEAR), cal.get( Calendar.MONTH));
+			// 日付選択時のコールバック（modeless化に伴う変更）
+			cd.onDateSelected = date -> {
+				currentStatusDate = date;
+				String[] parts = currentStatusDate.split( "-");
+				labelStatusDate.setText( parts[0] + "年" + parts[1] + "月" + parts[2] + "日");
+				refreshStatusGrid();
+			};
 			java.awt.Point p = btnCalendar.getLocationOnScreen();
 			int calW    = 310;
 			int calX    = p.x + btnCalendar.getWidth() - calW;
@@ -1446,12 +1679,6 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 			if( calX < 0)             calX = 0;
 			cd.setLocation( calX, p.y + btnCalendar.getHeight());
 			cd.setVisible( true);
-			if( cd.selectedDate != null) {
-				currentStatusDate = cd.selectedDate;
-				String[] parts = currentStatusDate.split( "-");
-				labelStatusDate.setText( parts[0] + "年" + parts[1] + "月" + parts[2] + "日  ");
-				refreshStatusGrid();
-			}
 
 		} else if( e.getSource() == buttonGoToLogin) {
 			cardLayout.show( panelContent, "login");

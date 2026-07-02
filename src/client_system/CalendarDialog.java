@@ -5,6 +5,7 @@ import java.awt.Button;
 import java.util.Calendar;
 import java.awt.Color;
 import java.awt.Dialog;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Frame;
 import java.awt.GridLayout;
@@ -30,14 +31,20 @@ public class CalendarDialog extends Dialog implements ActionListener {
 	static final Color HEADER  = new Color( 220, 215, 195);
 	static final Color GRIDLINE = new Color( 190, 195, 185);
 
+	public java.util.function.Consumer<String> onDateSelected;	// 日付選択時のコールバック
+
 	CalendarDialog( Frame owner, int initYear, int initMonth) {
-		super( owner, "日付を選択", true);
+		super( owner, "日付を選択", false);	// modeless: 外部クリックで閉じられるように
 		year  = initYear;
 		month = initMonth;
 		selectedDate = null;
 
-		setLayout( new BorderLayout( 4, 4));
-		setBackground( BG);
+		// 外枠（黒）を作る
+		setLayout( new BorderLayout());
+		setBackground( Color.BLACK);
+
+		Panel inner = new Panel( new BorderLayout( 4, 4));
+		inner.setBackground( BG);
 
 		// ナビゲーションヘッダー
 		Panel navPanel = new Panel( new BorderLayout());
@@ -56,17 +63,28 @@ public class CalendarDialog extends Dialog implements ActionListener {
 		navPanel.add( btnPrev,        BorderLayout.WEST);
 		navPanel.add( labelYearMonth, BorderLayout.CENTER);
 		navPanel.add( btnNext,        BorderLayout.EAST);
-		add( navPanel, BorderLayout.NORTH);
+		inner.add( navPanel, BorderLayout.NORTH);
 
 		panelGrid = new Panel();
-		add( panelGrid, BorderLayout.CENTER);
+		inner.add( panelGrid, BorderLayout.CENTER);
 
 		Panel southPanel = new Panel();
 		southPanel.setBackground( BG);
 		btnCancel = new Button( "キャンセル");
 		btnCancel.setFont( new Font( "Noto Sans JP", Font.BOLD, 12));
 		southPanel.add( btnCancel);
-		add( southPanel, BorderLayout.SOUTH);
+		inner.add( southPanel, BorderLayout.SOUTH);
+
+		// 中央にinnerを配置、4辺に1pxの黒スペーサーで外枠を作る
+		add( inner, BorderLayout.CENTER);
+		Panel topL = new Panel(); topL.setBackground( Color.BLACK); topL.setPreferredSize( new Dimension( 0, 1));
+		Panel botL = new Panel(); botL.setBackground( Color.BLACK); botL.setPreferredSize( new Dimension( 0, 1));
+		Panel lftL = new Panel(); lftL.setBackground( Color.BLACK); lftL.setPreferredSize( new Dimension( 1, 0));
+		Panel rgtL = new Panel(); rgtL.setBackground( Color.BLACK); rgtL.setPreferredSize( new Dimension( 1, 0));
+		add( topL, BorderLayout.NORTH);
+		add( botL, BorderLayout.SOUTH);
+		add( lftL, BorderLayout.WEST);
+		add( rgtL, BorderLayout.EAST);
 
 		btnPrev.addActionListener( this);
 		btnNext.addActionListener( this);
@@ -84,6 +102,13 @@ public class CalendarDialog extends Dialog implements ActionListener {
 		setUndecorated( true);		// タイトルバーを非表示
 		setSize( 310, 270);
 		setResizable( false);
+		// 外部クリックで閉じる
+		addWindowFocusListener( new java.awt.event.WindowFocusListener() {
+			@Override public void windowGainedFocus( WindowEvent e) {}
+			@Override public void windowLostFocus( WindowEvent e) {
+				setVisible( false); dispose();
+			}
+		});
 	}
 
 	private void updateGrid() {
@@ -150,6 +175,7 @@ public class CalendarDialog extends Dialog implements ActionListener {
 				@Override
 				public void actionPerformed( ActionEvent e) {
 					selectedDate = String.format( "%04d-%02d-%02d", year, month + 1, d);
+					if( onDateSelected != null) onDateSelected.accept( selectedDate);
 					setVisible( false);
 					dispose();
 				}
