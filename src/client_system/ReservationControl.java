@@ -214,6 +214,11 @@ public class ReservationControl {
 		dateRes.set( Integer.parseInt( year), Integer.parseInt( month) - 1, Integer.parseInt( day));
 		if( !dateRes.after( Calendar.getInstance())) return "予約日が無効です。（翌日以降を指定）";
 
+		// 時・分は必ず2桁に揃える（"9" → "09"）。文字列比較で "9" > "11" と誤判定されるのを防ぐ
+		if( startHour.length() == 1) startHour = "0" + startHour;
+		if( startMin.length()  == 1) startMin  = "0" + startMin;
+		if( endHour.length()   == 1) endHour   = "0" + endHour;
+		if( endMin.length()    == 1) endMin    = "0" + endMin;
 		String	st = startHour + ":" + startMin + ":00";
 		String	et = endHour   + ":" + endMin   + ":00";
 		if( st.compareTo( et) >= 0) return "開始時刻と終了時刻が同じか終了時刻の方が早くなっています。";
@@ -285,6 +290,11 @@ public class ReservationControl {
 		dateRes.set( Integer.parseInt( year), Integer.parseInt( month) - 1, Integer.parseInt( day));
 		if( !dateRes.after( Calendar.getInstance())) return "予約日が無効です。（翌日以降を指定）";
 
+		// 時・分は必ず2桁に揃える（"9" → "09"）。文字列比較で "9" > "11" と誤判定されるのを防ぐ
+		if( startHour.length() == 1) startHour = "0" + startHour;
+		if( startMin.length()  == 1) startMin  = "0" + startMin;
+		if( endHour.length()   == 1) endHour   = "0" + endHour;
+		if( endMin.length()    == 1) endMin    = "0" + endMin;
 		String	st = startHour + ":" + startMin + ":00";
 		String	et = endHour   + ":" + endMin   + ":00";
 		if( st.compareTo( et) >= 0) return "開始時刻と終了時刻が同じか終了時刻の方が早くなっています。";
