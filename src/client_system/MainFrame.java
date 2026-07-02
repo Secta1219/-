@@ -901,7 +901,7 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 		buttonSettings.addActionListener( this);
 		addWindowListener( this);
 
-		setMinimumSize( new Dimension( 1100, 700));
+		setMinimumSize( new Dimension( 1250, 700));	// カレンダー・階フィルタボタンが見切れないよう最小幅を確保
 	}
 
 	// ログイン状態に応じてサイドバーメニューを再構築
