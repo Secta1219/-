@@ -788,30 +788,46 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 
 		Label lblNew = new Label( "新しいパスワード");
 		lblNew.setFont( sf); lblNew.setBackground( BG);
-		lblNew.setBounds( 0, 96, SW, 20);
+		lblNew.setBounds( 0, 90, SW, 20);
 		tfNewPw = new TextField( "", 16);
 		tfNewPw.setEchoChar( '*'); tfNewPw.setFont( inputFont);
 		tfNewPw.setBackground( Color.WHITE);
-		tfNewPw.setBounds( 0, 120, SW, 26);
+		tfNewPw.setBounds( 0, 112, SW, 26);
+		// 入力枠の真下に表示する警告ラベル（英数字以外・30文字超で表示）
+		Label lblNewWarn = new Label( "");
+		lblNewWarn.setFont( new Font( "Noto Sans JP", Font.PLAIN, 11));
+		lblNewWarn.setForeground( new Color( 200, 50, 50));
+		lblNewWarn.setBackground( BG);
+		lblNewWarn.setBounds( 0, 139, SW, 16);
 
 		Label lblConf = new Label( "新しいパスワード（確認）");
 		lblConf.setFont( sf); lblConf.setBackground( BG);
-		lblConf.setBounds( 0, 156, SW, 20);
+		lblConf.setBounds( 0, 160, SW, 20);
 		tfConfirmPw = new TextField( "", 16);
 		tfConfirmPw.setEchoChar( '*'); tfConfirmPw.setFont( inputFont);
 		tfConfirmPw.setBackground( Color.WHITE);
-		tfConfirmPw.setBounds( 0, 180, SW, 26);
+		tfConfirmPw.setBounds( 0, 182, SW, 26);
+		// 確認欄の真下に表示する警告ラベル
+		Label lblConfWarn = new Label( "");
+		lblConfWarn.setFont( new Font( "Noto Sans JP", Font.PLAIN, 11));
+		lblConfWarn.setForeground( new Color( 200, 50, 50));
+		lblConfWarn.setBackground( BG);
+		lblConfWarn.setBounds( 0, 209, SW, 16);
+
+		// 英数字のみ・最大20文字に制限（不可文字入力時は真下の警告ラベルに表示）
+		limitPasswordInput( tfNewPw,     lblNewWarn);
+		limitPasswordInput( tfConfirmPw, lblConfWarn);
 
 		Button btnChangePw = new Button( "パスワードを変更");
 		btnChangePw.setFont( new Font( "Noto Sans JP", Font.BOLD, 13));
 		btnChangePw.setBackground( GREEN);
 		btnChangePw.setForeground( Color.WHITE);
-		btnChangePw.setBounds( 0, 220, SW, 32);
+		btnChangePw.setBounds( 0, 232, SW, 32);
 
 		labelPwResult = new Label( "");
 		labelPwResult.setFont( new Font( "Noto Sans JP", Font.PLAIN, 12));
 		labelPwResult.setBackground( BG);
-		labelPwResult.setBounds( 0, 260, SW, 20);
+		labelPwResult.setBounds( 0, 270, SW, 20);
 
 		// --- テーマ変更セクション ---
 		Label lblThemeTitle = new Label( "テーマ");
@@ -839,8 +855,10 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 
 		settingsBox.add( lblPwTitle); settingsBox.add( lblCur);
 		settingsBox.add( tfCurrentPw); settingsBox.add( lblNew);
-		settingsBox.add( tfNewPw); settingsBox.add( lblConf);
-		settingsBox.add( tfConfirmPw); settingsBox.add( btnChangePw);
+		settingsBox.add( tfNewPw); settingsBox.add( lblNewWarn);
+		settingsBox.add( lblConf);
+		settingsBox.add( tfConfirmPw); settingsBox.add( lblConfWarn);
+		settingsBox.add( btnChangePw);
 		settingsBox.add( labelPwResult);
 		settingsBox.add( lblThemeTitle);
 		settingsBox.setPreferredSize( new Dimension( SW, 380));
@@ -1280,6 +1298,37 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 					tf.setText( filtered);
 					tf.setCaretPosition( Math.min( caret, filtered.length()));
 				}
+			}
+		});
+	}
+
+	// パスワード入力を半角英数字のみ・最大20文字（DBのpassword列に合わせる）に制限し、不可文字入力時は警告ラベルに表示する
+	private void limitPasswordInput( final TextField tf, final Label warn) {
+		tf.addTextListener( new java.awt.event.TextListener() {
+			@Override
+			public void textValueChanged( java.awt.event.TextEvent e) {
+				String t = tf.getText();
+				StringBuilder sb = new StringBuilder();
+				boolean hadInvalid = false;
+				for( char c : t.toCharArray()) {
+					if( ( c >= 'a' && c <= 'z') || ( c >= 'A' && c <= 'Z') || ( c >= '0' && c <= '9')) {
+						sb.append( c);
+					} else {
+						hadInvalid = true;	// 記号・空白・全角などプログラムに使われうる文字を排除
+					}
+				}
+				String filtered = sb.toString();
+				boolean tooLong = false;
+				if( filtered.length() > 20) { filtered = filtered.substring( 0, 20); tooLong = true; }
+				if( !filtered.equals( t)) {
+					int caret = tf.getCaretPosition();
+					tf.setText( filtered);	// ここで再帰的にこのリスナが呼ばれるが、以降は変更なしで抜ける
+					tf.setCaretPosition( Math.min( caret, filtered.length()));
+				}
+				// 警告表示はsetText後（再帰呼び出しの後）に確定させる
+				if( hadInvalid)      warn.setText( "  使用できません（半角英数字のみ）");
+				else if( tooLong)    warn.setText( "  20文字までです");
+				else                 warn.setText( "");
 			}
 		});
 	}
