@@ -1552,6 +1552,8 @@ public class MainFrame extends Frame implements ActionListener, WindowListener {
 			currentStatusDate = norm;
 			String[] parts = norm.split( "-");
 			labelStatusDate.setText( parts[0] + "年" + parts[1] + "月" + parts[2] + "日");
+			// 入力欄自体も正規化した yyyy/MM/dd 形式へ整形する（BUG-FULL-004修正）
+			tfStatusDate.setText( parts[0] + "/" + parts[1] + "/" + parts[2]);
 			refreshStatusGrid();
 		} catch( Exception ex) {
 			// パース失敗時はキャンセル扱い

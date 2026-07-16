@@ -496,7 +496,8 @@ public class ReservationControl {
 		try {
 			Calendar cal = Calendar.getInstance();
 			String today = new SimpleDateFormat( "yyyy-MM-dd").format( cal.getTime());
-			cal.add( Calendar.DAY_OF_MONTH, 7);
+			// 本日を含む7日間（本日＋6日後まで）を集計する。BETWEEN両端inclusiveのため +6 とする（BUG-FULL-006修正）
+			cal.add( Calendar.DAY_OF_MONTH, 6);
 			String weekLater = new SimpleDateFormat( "yyyy-MM-dd").format( cal.getTime());
 			String sql = "SELECT COUNT(*) AS c FROM db_reservation.reservation"
 					+ " WHERE facility_id = ? AND day BETWEEN ? AND ?";
